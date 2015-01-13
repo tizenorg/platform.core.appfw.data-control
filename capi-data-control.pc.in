@@ -1,0 +1,15 @@
+
+# Package Information for pkg-config
+
+prefix=@PREFIX@
+exec_prefix=/usr
+libdir=@LIB_INSTALL_DIR@
+includedir=@INCLUDE_INSTALL_DIR@/appfw
+
+Name: capi-data-control
+Description: Data Control managed library
+Version: @VERSION@
+Requires: capi-base-common
+Libs: -L${libdir} -ldata-control
+Cflags: -I${includedir}
+
