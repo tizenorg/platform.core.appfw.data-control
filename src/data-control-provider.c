@@ -99,7 +99,7 @@ __get_client_pkgid(bundle *b)
 	pkgmgrinfo_appinfo_h app_info_handle = NULL;
 
 	caller_appid = bundle_get_val(b, AUL_K_CALLER_APPID);
-	pkgmgrinfo_appinfo_get_appinfo(caller_appid, &app_info_handle);
+	pkgmgrinfo_appinfo_get_usr_appinfo(caller_appid, getuid(), &app_info_handle);
 	pkgmgrinfo_appinfo_get_pkgname(app_info_handle, &caller_pkgid);
 	SECURE_LOGI("client pkg id : %s", caller_pkgid);
 
