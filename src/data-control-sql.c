@@ -605,7 +605,7 @@ datacontrol_sql_register_response_cb(datacontrol_h provider, datacontrol_sql_res
 	char* app_id = NULL;
 	char* access = NULL;
 
-	ret = pkgmgrinfo_appinfo_get_datacontrol_info(provider->provider_id, "Sql", &app_id, &access);
+	ret = pkgmgrinfo_appinfo_usr_get_datacontrol_info(provider->provider_id, "Sql", getuid(), &app_id, &access);
 	if (ret != PMINFO_R_OK)
 	{
 		LOGE("unable to get sql data control information: %d", ret);
@@ -776,7 +776,7 @@ __get_provider_pkgid(char* provider_id)
 	char *provider_pkgid = NULL;
 	pkgmgrinfo_appinfo_h app_info_handle = NULL;
 
-	int ret = pkgmgrinfo_appinfo_get_datacontrol_info(provider_id, "Sql", &provider_appid, &access);
+	int ret = pkgmgrinfo_appinfo_usr_get_datacontrol_info(provider_id, "Sql", getuid(), &provider_appid, &access);
 	if (ret != PMINFO_R_OK)
 	{
 		LOGE("unable to get sql data control information: %d", ret);

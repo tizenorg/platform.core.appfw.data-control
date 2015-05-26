@@ -642,7 +642,7 @@ datacontrol_map_register_response_cb(datacontrol_h provider, datacontrol_map_res
 	char* app_id = NULL;
 	char* access = NULL;
 
-	ret = pkgmgrinfo_appinfo_get_datacontrol_info(provider->provider_id, "Map", &app_id, &access);
+	ret = pkgmgrinfo_appinfo_usr_get_datacontrol_info(provider->provider_id, "Map", getuid(), &app_id, &access);
 	if (ret != PMINFO_R_OK)
 	{
 		LOGE("unable to get map data control information: %d", ret);
