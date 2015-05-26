@@ -833,7 +833,7 @@ datacontrol_sql_insert(datacontrol_h provider, const bundle* insert_data, int *r
 	int reqId = _datacontrol_create_request_id();
 	SECURE_LOGI("request id: %d", reqId);
 	char insert_map_file[REQUEST_PATH_MAX] = {0, };
-	ret = snprintf(insert_map_file, REQUEST_PATH_MAX, "%s/%s_%d", DATACONTROL_REQUEST_FILE_PREFIX, caller_app_id, reqId);
+	ret = snprintf(insert_map_file, REQUEST_PATH_MAX, "%s%s%d", DATACONTROL_REQUEST_FILE_PREFIX, caller_app_id, reqId);
 	if (ret < 0)
 	{
 		LOGE("unable to write formatted output to insert_map_file. errno = %d", errno);
@@ -1103,7 +1103,7 @@ datacontrol_sql_update(datacontrol_h provider, const bundle* update_data, const 
 	int reqId = _datacontrol_create_request_id();
 
 	char update_map_file[REQUEST_PATH_MAX] = {0, };
-	ret = snprintf(update_map_file, REQUEST_PATH_MAX, "%s/%s_%d", DATACONTROL_REQUEST_FILE_PREFIX, caller_app_id, reqId);
+	ret = snprintf(update_map_file, REQUEST_PATH_MAX, "%s%s%d", DATACONTROL_REQUEST_FILE_PREFIX, caller_app_id, reqId);
 	if (ret < 0)
 	{
 		LOGE("unable to write formatted output to update_map_file: %d", errno);
