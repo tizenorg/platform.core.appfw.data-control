@@ -163,7 +163,7 @@ datacontrol_map_get_value_list(const char *path, int count)
 
 	SECURE_LOGI("The result file of GET: %s", path);
 	/* TODO - shoud be changed to solve security concerns */
-	fd = open(path, O_RDONLY, 644);
+	fd = open(path, O_RDONLY, 0644);
 	if (fd == -1)
 	{
 		SECURE_LOGE("unable to open update_map file: %d", errno);

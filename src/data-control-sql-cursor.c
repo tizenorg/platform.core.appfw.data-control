@@ -33,7 +33,7 @@ resultset_cursor* datacontrol_sql_get_cursor(const char * path)
 	cursor->resultset_current_offset = 0;
 	cursor->resultset_current_row_count = 0;
 	/* TODO - shoud be changed to solve security concerns */
-	cursor->resultset_fd = open(path, O_RDONLY, 644);
+	cursor->resultset_fd = open(path, O_RDONLY, 0644);
 	if (cursor->resultset_fd == -1)
 	{
 		SECURE_LOGE("unable to open resultset file(%s): %d", path, errno);

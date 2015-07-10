@@ -846,7 +846,7 @@ datacontrol_sql_insert(datacontrol_h provider, const bundle* insert_data, int *r
 	char *provider_pkgid = __get_provider_pkgid(provider->provider_id);
 
 	/* TODO - shoud be changed to solve security concerns */
-	fd = open(insert_map_file, O_WRONLY | O_CREAT, 644);
+	fd = open(insert_map_file, O_WRONLY | O_CREAT, 0644);
 	if (fd == -1) {
 		SECURE_LOGE("unable to open insert_map file: %d", errno);
 		free(provider_pkgid);
@@ -1116,7 +1116,7 @@ datacontrol_sql_update(datacontrol_h provider, const bundle* update_data, const 
 	char *provider_pkgid = __get_provider_pkgid(provider->provider_id);
 
 	/* TODO - shoud be changed to solve security concerns */
-	fd = open(update_map_file, O_WRONLY | O_CREAT, 644);
+	fd = open(update_map_file, O_WRONLY | O_CREAT, 0644);
 	if (fd == -1)
 	{
 		SECURE_LOGE("unable to open update_map file: %d", errno);
