@@ -427,7 +427,7 @@ __set_get_value_result(bundle *b, const char* path, char **value_list)
 
 	client_pkgid = __get_client_pkgid(b);
 	/* TODO - shoud be changed to solve security concerns */
-	fd = open(path, O_WRONLY | O_CREAT, 644);
+	fd = open(path, O_WRONLY | O_CREAT, 0644);
 	if (fd == -1) {
 		SECURE_LOGE("unable to open insert_map file: %d", errno);
 		free(client_pkgid);
@@ -467,7 +467,7 @@ __get_result_file_path(bundle *b)
 	const char *caller_req_id = bundle_get_val(b, OSP_K_REQUEST_ID);
 
 	char *result_path = calloc(RESULT_PATH_MAX, sizeof(char));
-	snprintf(result_path, RESULT_PATH_MAX, "%s/%s_%s", DATACONTROL_RESULT_FILE_PREFIX, caller, caller_req_id);
+	snprintf(result_path, RESULT_PATH_MAX, "%s%s%s", DATACONTROL_RESULT_FILE_PREFIX, caller, caller_req_id);
 
 	SECURE_LOGI("result file path: %s", result_path);
 
