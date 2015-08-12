@@ -20,7 +20,6 @@
 #include <glib.h>
 #include <unistd.h>
 
-#include <sys/smack.h>
 #include <sys/types.h>
 #include <fcntl.h>
 #include "data_control_internal.h"
