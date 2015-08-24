@@ -50,8 +50,8 @@
 #define OSP_V_VERSION_2_1_0_3  "ver_2.1.0.3"
 #define OSP_V_CALLER_TYPE_OSP  "osp"
 
-#define DATACONTROL_REQUEST_FILE_PREFIX "/tmp/datacontrol.request."
-#define DATACONTROL_RESULT_FILE_PREFIX  "/tmp/datacontrol.result."
+#define DATACONTROL_REQUEST_FILE_PREFIX "/tmp/data-control/datacontrol.request."
+#define DATACONTROL_RESULT_FILE_PREFIX  "/tmp/data-control/datacontrol.result."
 
 
 /**
