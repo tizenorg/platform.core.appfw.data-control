@@ -19,10 +19,14 @@
 #include <string.h>
 #include <glib.h>
 #include <unistd.h>
-
 #include <sys/types.h>
 #include <fcntl.h>
+#include <cynara-client.h>
+#include <stdio.h>
+
 #include "data_control_internal.h"
+
+#define SMACK_LABEL_LEN 255
 
 #ifdef LOG_TAG
 #undef LOG_TAG
@@ -32,6 +36,68 @@
 
 #define _LOGE(fmt, arg...) LOGE(fmt,##arg)
 #define _LOGD(fmt, arg...) LOGD(fmt, ##arg)
+
+
+int datacontrol_check_privilege(privilege_type check_type) {
+
+	cynara *p_cynara;
+
+	int fd = 0;
+	int ret = 0;
+	char subject_label[SMACK_LABEL_LEN + 1] = "";
+	char uid[10] = {0,};
+	char *client_session = "";
+
+	ret = cynara_initialize(&p_cynara, NULL);
+	if (ret != CYNARA_API_SUCCESS) {
+		LOGE("cannot init cynara [%d] failed!", ret);
+		ret = DATA_CONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	fd = open("/proc/self/attr/current", O_RDONLY);
+	if (fd < 0) {
+		LOGE("open [%d] failed!", errno);
+		ret = DATA_CONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	ret = read(fd, subject_label, SMACK_LABEL_LEN);
+	if (ret < 0) {
+		LOGE("read [%d] failed!", errno);
+		close(fd);
+		ret = DATA_CONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+	close(fd);
+
+	snprintf(uid, 10, "%d", getuid());
+	ret = cynara_check(p_cynara, subject_label, client_session, uid,
+			"http://tizen.org/privilege/datasharing");
+	if (ret != CYNARA_API_ACCESS_ALLOWED) {
+		LOGE("cynara access check [%d] failed!", ret);
+		ret = DATA_CONTROL_ERROR_PERMISSION_DENIED;
+		goto out;
+	}
+
+	if (check_type == PRIVILEGE_CONSUMER) {
+		ret = cynara_check(p_cynara, subject_label, client_session, uid,
+				"http://tizen.org/privilege/appmanager.launch");
+		if (ret != CYNARA_API_ACCESS_ALLOWED) {
+			LOGE("cynara access check [%d] failed!", ret);
+			ret = DATA_CONTROL_ERROR_PERMISSION_DENIED;
+			goto out;
+		}
+	}
+
+	ret = DATA_CONTROL_ERROR_NONE;
+out:
+
+	if (p_cynara)
+		cynara_finish(p_cynara);
+
+	return ret;
+}
 
 static const char *data_control_error_to_string(data_control_error_e error)
 {
