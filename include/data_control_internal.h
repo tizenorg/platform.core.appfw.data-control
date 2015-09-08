@@ -24,9 +24,13 @@
 extern "C" {
 #endif
 
+#define CHECK_TYPE_CONSUMER 0
+#define CHECK_TYPE_PROVIDER 1
+
 int convert_to_tizen_error(datacontrol_error_e error);
 int data_control_error(data_control_error_e error,
 		const char *function, const char *description);
+int datacontrol_check_privilege(int check_type);
 
 #ifdef __cplusplus
 }

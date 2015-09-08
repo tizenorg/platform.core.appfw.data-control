@@ -10,9 +10,10 @@ BuildRequires:  pkgconfig(dlog)
 BuildRequires:  pkgconfig(bundle)
 BuildRequires:  pkgconfig(appsvc)
 BuildRequires:  pkgconfig(pkgmgr-info)
+BuildRequires:  pkgconfig(pkgmgr-info)
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(capi-base-common)
-
+BuildRequires: pkgconfig(cynara-client)
 # runtime requires
 Requires(post): /sbin/ldconfig
 Requires(post): coreutils
