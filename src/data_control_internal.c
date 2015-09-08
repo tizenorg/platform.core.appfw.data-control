@@ -19,7 +19,7 @@
 #include <string.h>
 #include <glib.h>
 #include <unistd.h>
-
+#include <privilege_manager.h>
 #include <sys/types.h>
 #include <fcntl.h>
 #include "data_control_internal.h"
@@ -32,6 +32,40 @@
 
 #define _LOGE(fmt, arg...) LOGE(fmt,##arg)
 #define _LOGD(fmt, arg...) LOGD(fmt, ##arg)
+
+
+int datacontrol_check_consumer_privilege() {
+
+	int ret;
+	GList* privilege_list = NULL;
+	char* error_message = NULL;
+
+	privilege_list = g_list_append(privilege_list, "http://tizen.org/privilege/datasharing");
+	privilege_list = g_list_append(privilege_list, "http://tizen.org/privilege/appmanager.launch");
+	ret = privilege_manager_verify_privilege("2.3", PRVMGR_PACKAGE_TYPE_CORE, privilege_list, PRVMGR_PACKAGE_VISIBILITY_PUBLIC, &error_message);
+
+	if (ret != PRVMGR_ERR_NONE) {
+		LOGE("datacontrol verify privilege fail %d, %s", ret, error_message);
+		return DATA_CONTROL_ERROR_PERMISSION_DENIED;
+	}
+	return DATA_CONTROL_ERROR_NONE;
+}
+
+int datacontrol_check_provider_privilege() {
+
+	int ret;
+	GList* privilege_list = NULL;
+	char* error_message = NULL;
+
+	privilege_list = g_list_append(privilege_list, "http://tizen.org/privilege/datasharing");
+	ret = privilege_manager_verify_privilege("2.3", PRVMGR_PACKAGE_TYPE_CORE, privilege_list, PRVMGR_PACKAGE_VISIBILITY_PUBLIC, &error_message);
+
+	if (ret != PRVMGR_ERR_NONE) {
+		LOGE("datacontrol verify privilege fail %d, %s", ret, error_message);
+		return DATA_CONTROL_ERROR_PERMISSION_DENIED;
+	}
+	return DATA_CONTROL_ERROR_NONE;
+}
 
 static const char *data_control_error_to_string(data_control_error_e error)
 {
