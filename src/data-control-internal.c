@@ -16,6 +16,7 @@
 #define MAX_COLUMN_SIZE				512
 #define MAX_STATEMENT_SIZE			1024
 
+
 int
 _datacontrol_sql_get_cursor(const char *path)
 {

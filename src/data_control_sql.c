@@ -177,24 +177,41 @@ data_control_sql_unregister_response_cb(data_control_h provider)
 EXPORT_API int
 data_control_sql_insert(data_control_h provider, const bundle* insert_data, int *request_id)
 {
+
+	int retval = datacontrol_check_consumer_privilege();
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	return datacontrol_sql_insert((datacontrol_h)provider, insert_data, request_id);
 }
 
 EXPORT_API int
 data_control_sql_delete(data_control_h provider, const char *where, int *request_id)
 {
+	int retval = datacontrol_check_consumer_privilege();
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	return datacontrol_sql_delete((datacontrol_h)provider, where, request_id);
 }
 
 EXPORT_API int
 data_control_sql_select(data_control_h provider, char **column_list, int column_count, const char *where, const char *order, int *request_id)
 {
+	int retval = datacontrol_check_consumer_privilege();
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	return datacontrol_sql_select((datacontrol_h)provider, column_list, column_count, where, order, request_id);
 }
 
 EXPORT_API int
 data_control_sql_select_with_page(data_control_h provider, char **column_list, int column_count, const char *where, const char *order, int page_number, int count_per_page, int *request_id)
 {
+	int retval = datacontrol_check_consumer_privilege();
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	return datacontrol_sql_select_with_page((datacontrol_h)provider, column_list, column_count, where, order, page_number, count_per_page, request_id);
 }
 
@@ -202,6 +219,11 @@ data_control_sql_select_with_page(data_control_h provider, char **column_list, i
 EXPORT_API int
 data_control_sql_update(data_control_h provider, const bundle* update_data, const char *where, int *request_id)
 {
+
+	int retval = datacontrol_check_consumer_privilege();
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	return datacontrol_sql_update((datacontrol_h)provider, update_data, where, request_id);
 }
 

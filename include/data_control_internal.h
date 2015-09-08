@@ -27,6 +27,8 @@ extern "C" {
 int convert_to_tizen_error(datacontrol_error_e error);
 int data_control_error(data_control_error_e error,
 		const char *function, const char *description);
+int datacontrol_check_consumer_privilege(void);
+int datacontrol_check_provider_privilege(void);
 
 #ifdef __cplusplus
 }
