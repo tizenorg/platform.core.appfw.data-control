@@ -8,7 +8,7 @@ INCLUDE_DIRECTORIES (
 	include
 	)
 
-SET(requires "dlog bundle glib-2.0 appsvc pkgmgr-info capi-base-common")
+SET(requires "dlog bundle glib-2.0 appsvc pkgmgr-info capi-base-common cynara-client")
 INCLUDE(FindPkgConfig)
 pkg_check_modules(pkgs REQUIRED ${requires})
 

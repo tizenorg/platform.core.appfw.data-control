@@ -132,6 +132,11 @@ __map_remove_request_cb(int request_id, datacontrol_h provider, const char *key,
 EXPORT_API int
 data_control_provider_sql_register_cb(data_control_provider_sql_cb *callback, void *user_data)
 {
+
+	int retval = datacontrol_check_privilege(CHECK_TYPE_PROVIDER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	if (!callback)
 		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
 
@@ -156,6 +161,11 @@ data_control_provider_sql_unregister_cb(void)
 EXPORT_API int
 data_control_provider_map_register_cb(data_control_provider_map_cb *callback, void *user_data)
 {
+
+	int retval = datacontrol_check_privilege(CHECK_TYPE_PROVIDER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	if (!callback)
 		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
 

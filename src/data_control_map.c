@@ -179,29 +179,49 @@ data_control_map_unregister_response_cb(data_control_h provider)
 EXPORT_API int
 data_control_map_get(data_control_h provider, const char *key, int *request_id)
 {
+	int retval = datacontrol_check_privilege(CHECK_TYPE_CONSUMER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	return convert_to_tizen_error(datacontrol_map_get((datacontrol_h)provider, key, request_id));
 }
 
 EXPORT_API int
 data_control_map_get_with_page(data_control_h provider, const char *key, int *request_id, int page_number, int count_per_page)
 {
+	int retval = datacontrol_check_privilege(CHECK_TYPE_CONSUMER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	return convert_to_tizen_error(datacontrol_map_get_with_page((datacontrol_h)provider, key, request_id, page_number, count_per_page));
 }
 
 EXPORT_API int
 data_control_map_set(data_control_h provider, const char *key, const char *old_value, const char *new_value, int *request_id)
 {
+	int retval = datacontrol_check_privilege(CHECK_TYPE_CONSUMER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	return convert_to_tizen_error(datacontrol_map_set((datacontrol_h)provider, key, old_value, new_value, request_id));
 }
 
 EXPORT_API int
 data_control_map_add(data_control_h provider, const char *key, const char *value, int *request_id)
 {
+	int retval = datacontrol_check_privilege(CHECK_TYPE_CONSUMER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	return convert_to_tizen_error(datacontrol_map_add((datacontrol_h)provider, key, value, request_id));
 }
 
 EXPORT_API int
 data_control_map_remove(data_control_h provider, const char *key, const char *value, int *request_id)
 {
+	int retval = datacontrol_check_privilege(CHECK_TYPE_CONSUMER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
 	return convert_to_tizen_error(datacontrol_map_remove((datacontrol_h)provider, key, value, request_id));
 }
