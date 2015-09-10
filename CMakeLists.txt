@@ -43,7 +43,7 @@ SET_TARGET_PROPERTIES(${PROJECT_NAME}
 
 ADD_CUSTOM_COMMAND(
 	TARGET ${PROJECT_NAME} POST_BUILD
-	COMMAND ln -s libdata-control.so.${MAJORVER} libcapi-data-control.so)
+	COMMAND ln -s libdata-control.so.${MAJORVER} libcapi-data-control.so.1)
 
 SET(VERSION ${FULLVER})
 CONFIGURE_FILE(${PROJECT_NAME}.pc.in ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.pc @ONLY)
