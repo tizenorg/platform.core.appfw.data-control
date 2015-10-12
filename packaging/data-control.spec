@@ -12,7 +12,8 @@ BuildRequires:  pkgconfig(appsvc)
 BuildRequires:  pkgconfig(pkgmgr-info)
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(capi-base-common)
-BuildRequires: pkgconfig(cynara-client)
+BuildRequires:  pkgconfig(cynara-client)
+BuildRequires:  pkgconfig(sqlite3)
 # runtime requires
 Requires(post): /sbin/ldconfig
 Requires(post): coreutils
