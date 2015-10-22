@@ -14,11 +14,11 @@
 #define LOG_TAG "DATA_CONTROL"
 #endif
 
-static int *row_offset_list = NULL;
+#define MAX_ROW_COUNT	        1024
 
-resultset_cursor* datacontrol_sql_get_cursor(const char * path)
+resultset_cursor* datacontrol_sql_get_cursor()
 {
-	resultset_cursor *cursor = (resultset_cursor *)calloc(sizeof(resultset_cursor), 1);
+	resultset_cursor *cursor = (resultset_cursor *)calloc(1, sizeof(resultset_cursor));
 	if (!cursor)
 	{
 		LOGE("unable to create cursor");
@@ -32,139 +32,29 @@ resultset_cursor* datacontrol_sql_get_cursor(const char * path)
 	cursor->resultset_content_offset = 0;
 	cursor->resultset_current_offset = 0;
 	cursor->resultset_current_row_count = 0;
-	/* TODO - shoud be changed to solve security concerns */
-	cursor->resultset_fd = open(path, O_RDONLY, 0644);
-	if (cursor->resultset_fd == -1)
-	{
-		SECURE_LOGE("unable to open resultset file(%s): %d", path, errno);
-		goto EXCEPTION;
-	}
-
-	cursor->resultset_path = strdup(path);
-	if (!cursor->resultset_path)
-	{
-		SECURE_LOGE("unable to assign path to resultset file: %d", errno);
-		close(cursor->resultset_fd);
-		goto EXCEPTION;
-	}
 
 	return cursor;
 
-EXCEPTION:
-	free(cursor);
-	return NULL;
 }
 
 int datacontrol_sql_step_next(resultset_cursor *cursor)
 {
-	int total_col_name_size = 0;
-	int ret = 0;
-	int fd = cursor->resultset_fd;
-	if (cursor->resultset_current_offset == 0)
-	{
-		ret = lseek(fd, 0, SEEK_SET);
-		if (ret < 0)
-		{
-			LOGE("unable to seek to beginning in the resultset file: %d", errno);
-			return DATACONTROL_ERROR_IO_ERROR;
-		}
-
-		ret = read(fd, &(cursor->resultset_row_count), sizeof(int));
-		if (ret <= 0)
-		{
-			LOGE("unable to read the resultset file: %d", errno);
-			return DATACONTROL_ERROR_IO_ERROR;
-		}
-
-		ret = read(fd, &(cursor->resultset_col_count), sizeof(int));
-		if (ret <= 0)
-		{
-			LOGE("unable to read the resultset file: %d", errno);
-			return DATACONTROL_ERROR_IO_ERROR;
-		}
-
-		ret = read(fd, &(total_col_name_size), sizeof(int));
-		if (ret <= 0)
-		{
-			LOGE("unable to read the resultset file: %d", errno);
-			return DATACONTROL_ERROR_IO_ERROR;
-		}
-
-		cursor->resultset_col_type_offset = sizeof(int) * 3;
-		cursor->resultset_col_name_offset = cursor->resultset_col_type_offset + (cursor->resultset_col_count) * sizeof(int);
-		cursor->resultset_content_offset = cursor->resultset_col_name_offset + total_col_name_size;
-
-		cursor->resultset_current_offset = cursor->resultset_content_offset;
-
-		row_offset_list = (int *)malloc((cursor->resultset_row_count) * (sizeof(int)));
-		if (!row_offset_list)
-		{
-			LOGE("unable to create row_offset_list");
-			return DATACONTROL_ERROR_OUT_OF_MEMORY;
-		}
-
-		int counter = 0;
-		for (counter = 0; counter < cursor->resultset_row_count; counter++)
-		{
-			row_offset_list[counter] = 0;
-		}
-		row_offset_list[cursor->resultset_current_row_count] = cursor->resultset_current_offset;
+	if (cursor == NULL || cursor->resultset_row_count == 0) {
+		LOGE("Reached to the end of the result set");
+		return DATACONTROL_ERROR_IO_ERROR;
 	}
-	else
-	{
-		if (!(cursor->resultset_current_row_count < (cursor->resultset_row_count -1)))
-		{
+
+	if (cursor->resultset_current_offset == 0)
+		cursor->resultset_current_offset = cursor->resultset_content_offset;
+	else {
+		if (!(cursor->resultset_current_row_count < (cursor->resultset_row_count - 1))) {
 			LOGE("Reached to the end of the result set");
 			return DATACONTROL_ERROR_IO_ERROR;
 		}
 
-		ret = row_offset_list[cursor->resultset_current_row_count + 1];
-		if (ret == 0) // Move to next offset
-		{
-			int size = 0;
-			int i = 0;
-
-			ret = lseek(fd, cursor->resultset_current_offset, SEEK_SET);
-			if (ret < 0)
-			{
-				LOGE("unable to seek in the resultset file: %d", errno);
-				return DATACONTROL_ERROR_IO_ERROR;
-			}
-
-			for (i = 0; i < cursor->resultset_col_count; i++)
-			{
-				ret = lseek(fd, sizeof(int), SEEK_CUR);
-				if (ret < 0)
-				{
-					LOGE("unable to seek in the resultset file: %d", errno);
-					return DATACONTROL_ERROR_IO_ERROR;
-				}
-
-				ret = read(fd, &size, sizeof(int));
-				if (ret == 0)
-				{
-					LOGE("unable to read the resultset file: %d", errno);
-					return DATACONTROL_ERROR_IO_ERROR;
-				}
-
-				ret = lseek(fd, size, SEEK_CUR);
-				if (ret < 0)
-				{
-					LOGE("unable to seek in the resultset file: %d", errno);
-					return DATACONTROL_ERROR_IO_ERROR;
-				}
-
-				cursor->resultset_current_offset += sizeof(int) * 2 + size;
-			}
-
-			row_offset_list[cursor->resultset_current_row_count + 1] = cursor->resultset_current_offset;
-		}
-		else
-		{
-			cursor->resultset_current_offset = row_offset_list[cursor->resultset_current_row_count + 1];
-		}
-		cursor->resultset_current_row_count++;
-
+		cursor->resultset_current_offset =
+			cursor->row_offset_list[cursor->resultset_current_row_count + 1];
+		cursor->resultset_current_row_count ++;
 	}
 	return DATACONTROL_ERROR_NONE;
 }
@@ -178,7 +68,7 @@ int datacontrol_sql_step_last(resultset_cursor *cursor)
 		return DATACONTROL_ERROR_NONE; // Already @ last row
 	}
 
-	if (!row_offset_list)
+	if (!cursor->row_offset_list)
 	{
 		ret = datacontrol_sql_step_next(cursor); // make a first move
 		if (ret != DATACONTROL_ERROR_NONE)
@@ -188,9 +78,9 @@ int datacontrol_sql_step_last(resultset_cursor *cursor)
 	}
 
 	// check if the rowOffsetList contains last row offset
-	if (row_offset_list && row_offset_list[cursor->resultset_row_count - 1] != 0)
+	if (cursor->row_offset_list && cursor->row_offset_list[cursor->resultset_row_count - 1] != 0)
 	{
-		cursor->resultset_current_offset = row_offset_list[cursor->resultset_row_count - 1];
+		cursor->resultset_current_offset = cursor->row_offset_list[cursor->resultset_row_count - 1];
 		cursor->resultset_current_row_count = cursor->resultset_row_count - 1;
 	}
 	else
@@ -234,7 +124,7 @@ int datacontrol_sql_step_previous(resultset_cursor *cursor)
 		LOGE("invalid request");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
-	cursor->resultset_current_offset = row_offset_list[cursor->resultset_current_row_count - 1];
+	cursor->resultset_current_offset = cursor->row_offset_list[cursor->resultset_current_row_count - 1];
 	cursor->resultset_current_row_count--;
 
 	return DATACONTROL_ERROR_NONE;
@@ -298,7 +188,8 @@ int datacontrol_sql_get_column_item_size(resultset_cursor *cursor, int column_in
 	ret = lseek(fd, cursor->resultset_current_offset, SEEK_SET);
 	if (ret < 0)
 	{
-		LOGE("unable to seek in the resultset file: %s", strerror(errno));
+		LOGE("unable to seek in the resultset file: %d %s", cursor->resultset_current_offset,
+				strerror(errno));
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
@@ -707,7 +598,8 @@ int datacontrol_sql_get_text_data(resultset_cursor *cursor, int column_index, ch
 
 	if (type != (int)DATACONTROL_SQL_COLUMN_TYPE_TEXT)
 	{
-		LOGE("type mismatch: requested for text type but %d present:", type);
+		LOGE("type mismatch: requested for text type but %d present %d", type,
+				cursor->resultset_current_offset);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
@@ -754,11 +646,12 @@ int datacontrol_sql_remove_cursor(resultset_cursor *cursor)
 		LOGE("unable to remove map query result file: %d", ret);
 	}
 
-	free(row_offset_list);
-	row_offset_list = 0;
-
-	free(cursor->resultset_path);
-	free(cursor);
+	if (cursor->row_offset_list)
+		free(cursor->row_offset_list);
+	if (cursor->resultset_path)
+		free(cursor->resultset_path);
+	if (cursor)
+		free(cursor);
 
 	return DATACONTROL_ERROR_NONE;
 }
