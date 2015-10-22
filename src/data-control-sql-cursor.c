@@ -14,6 +14,8 @@
 #define LOG_TAG "DATA_CONTROL"
 #endif
 
+#define MAX_ROW_COUNT	        1024
+
 static int *row_offset_list = NULL;
 
 resultset_cursor* datacontrol_sql_get_cursor(const char * path)
@@ -59,6 +61,8 @@ int datacontrol_sql_step_next(resultset_cursor *cursor)
 {
 	int total_col_name_size = 0;
 	int ret = 0;
+	int i = 0;
+	int j = 0;
 	int fd = cursor->resultset_fd;
 	if (cursor->resultset_current_offset == 0)
 	{
@@ -69,36 +73,73 @@ int datacontrol_sql_step_next(resultset_cursor *cursor)
 			return DATACONTROL_ERROR_IO_ERROR;
 		}
 
-		ret = read(fd, &(cursor->resultset_row_count), sizeof(int));
-		if (ret <= 0)
-		{
-			LOGE("unable to read the resultset file: %d", errno);
-			return DATACONTROL_ERROR_IO_ERROR;
-		}
-
 		ret = read(fd, &(cursor->resultset_col_count), sizeof(int));
 		if (ret <= 0)
 		{
 			LOGE("unable to read the resultset file: %d", errno);
 			return DATACONTROL_ERROR_IO_ERROR;
 		}
+		cursor->resultset_col_type_offset = sizeof(int);
+
+		for (i = 0; i < cursor->resultset_col_count; i ++) {
+			int col_type;
+			ret = read(fd, &col_type, sizeof(int));
+			if (ret <= 0)
+			{
+				LOGE("unable to read the resultset file: %d", errno);
+				return DATACONTROL_ERROR_IO_ERROR;
+			}
+
+		}
+		cursor->resultset_col_name_offset = cursor->resultset_col_type_offset + (cursor->resultset_col_count) * sizeof(int);
+
+		for (i = 0; i < cursor->resultset_col_count; i ++) {
+			int column_name_len = 0;
+			char *column_name;
+			ret = read(fd, &column_name_len, sizeof(int));
+			if (ret <= 0) {
+				LOGE("unable to read the resultset file: %d", errno);
+				return DATACONTROL_ERROR_IO_ERROR;
+			}
+			LOGI("column_name_len !!: %d", column_name_len);
+			column_name = (char *) malloc(sizeof(char) * column_name_len);
+
+			ret = read(fd, column_name, column_name_len);
+			if (ret <= 0) {
+				LOGE("unable to read the resultset file: %d", errno);
+				return DATACONTROL_ERROR_IO_ERROR;
+			}
+			column_name[column_name_len - 1] = '\0';
+			LOGI("column_name : %s", column_name);
+			free(column_name);
+
+		}
 
 		ret = read(fd, &(total_col_name_size), sizeof(int));
-		if (ret <= 0)
-		{
+		if (ret <= 0) {
 			LOGE("unable to read the resultset file: %d", errno);
 			return DATACONTROL_ERROR_IO_ERROR;
 		}
 
-		cursor->resultset_col_type_offset = sizeof(int) * 3;
-		cursor->resultset_col_name_offset = cursor->resultset_col_type_offset + (cursor->resultset_col_count) * sizeof(int);
-		cursor->resultset_content_offset = cursor->resultset_col_name_offset + total_col_name_size;
+		LOGE("total_col_name_size : %d", total_col_name_size);
+		ret = read(fd, &(cursor->resultset_row_count), sizeof(int));
+		if (ret <= 0) {
+			LOGE("unable to read the resultset file: %d", errno);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
 
+		if (cursor->resultset_row_count > MAX_ROW_COUNT || cursor->resultset_row_count < 1) {
+			LOGE("tainted row count : %d", cursor->resultset_row_count);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+
+		cursor->resultset_content_offset = lseek(fd, 0, SEEK_CUR);
 		cursor->resultset_current_offset = cursor->resultset_content_offset;
+		LOGI("row : %d, content_offset : %d, test: %d", cursor->resultset_row_count, cursor->resultset_content_offset,
+				cursor->resultset_col_name_offset + total_col_name_size + sizeof(int) * 2);
 
 		row_offset_list = (int *)malloc((cursor->resultset_row_count) * (sizeof(int)));
-		if (!row_offset_list)
-		{
+		if (!row_offset_list) {
 			LOGE("unable to create row_offset_list");
 			return DATACONTROL_ERROR_OUT_OF_MEMORY;
 		}
@@ -109,6 +150,44 @@ int datacontrol_sql_step_next(resultset_cursor *cursor)
 			row_offset_list[counter] = 0;
 		}
 		row_offset_list[cursor->resultset_current_row_count] = cursor->resultset_current_offset;
+
+		for (i = 0; i < cursor->resultset_row_count; i ++) {
+
+			for (j = 0; j < cursor->resultset_col_count; j ++) {
+				int type = 0;
+				int size = 0;
+				void *value = NULL;
+
+				ret = read(fd, &type, sizeof(int));
+				if (ret <= 0) {
+					LOGE("unable to read the resultset file: %d", errno);
+					return DATACONTROL_ERROR_IO_ERROR;
+				}
+				LOGI("type : %d", type);
+
+				ret = read(fd, &size, sizeof(int));
+				if (ret <= 0) {
+					LOGE("unable to read the resultset file: %d", errno);
+					return DATACONTROL_ERROR_IO_ERROR;
+				}
+				LOGI("size : %d", size);
+
+				if (size > 0) {
+					value = (void *)malloc(sizeof(void) * size);
+
+					ret = read(fd, value, size);
+					if (ret <= 0) {
+						LOGE("unable to read the resultset file: %d", errno);
+						return DATACONTROL_ERROR_IO_ERROR;
+					}
+
+					if (type == 1)
+						LOGI("value : %lld", *(long long *)value);
+					else
+						LOGI("value : %s", value);
+				}
+			}
+		}
 	}
 	else
 	{
