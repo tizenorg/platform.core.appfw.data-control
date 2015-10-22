@@ -257,7 +257,7 @@ data_control_provider_create_insert_statement(data_control_h provider, bundle *i
 		return NULL;
 	}
 
-	key_val_pair *cols = (key_val_pair *) calloc(sizeof(key_val_pair), 1);
+	key_val_pair *cols = (key_val_pair *) calloc(1, sizeof(key_val_pair));
 	if (cols == NULL)
 	{
 		set_last_result(DATA_CONTROL_ERROR_OUT_OF_MEMORY);
@@ -266,7 +266,7 @@ data_control_provider_create_insert_statement(data_control_h provider, bundle *i
 
 	cols->no_of_elements = 0;
 	cols->length = 0;
-	cols->keys = (char **) calloc(sizeof(char *), row_count);
+	cols->keys = (char **) calloc(row_count, sizeof(char *));
 	if (cols->keys == NULL)
 	{
 		free(cols);
@@ -274,7 +274,7 @@ data_control_provider_create_insert_statement(data_control_h provider, bundle *i
 		return NULL;
 	}
 
-	cols->vals = (char **) calloc(sizeof(char *), row_count);
+	cols->vals = (char **) calloc(row_count, sizeof(char *));
 	if (cols->vals == NULL)
 	{
 		free(cols->keys);
@@ -293,7 +293,7 @@ data_control_provider_create_insert_statement(data_control_h provider, bundle *i
 
 	_LOGI("SQL statement length: %d", sql_len);
 
-	char* sql = (char *) calloc(sizeof(char), sql_len);
+	char* sql = (char *) calloc(sql_len, sizeof(char));
 	if (sql == NULL)
 	{
 		free(data_id);
@@ -358,7 +358,7 @@ data_control_provider_create_delete_statement(data_control_h provider, const cha
 
 	_LOGI("SQL statement length: %d", sql_len);
 
-	char* sql = (char *) calloc(sizeof(char), sql_len);
+	char* sql = (char *) calloc(sql_len, sizeof(char));
 	if (sql == NULL)
 	{
 		free(data_id);
@@ -390,7 +390,7 @@ data_control_provider_create_update_statement(data_control_h provider, bundle *u
 		return NULL;
 	}
 
-	key_val_pair *cols = (key_val_pair *) calloc(sizeof(key_val_pair), 1);
+	key_val_pair *cols = (key_val_pair *) calloc(1, sizeof(key_val_pair));
 	if (cols == NULL)
 	{
 		set_last_result(DATA_CONTROL_ERROR_OUT_OF_MEMORY);
@@ -399,14 +399,14 @@ data_control_provider_create_update_statement(data_control_h provider, bundle *u
 
 	cols->no_of_elements = 0;
 	cols->length = 0;
-	cols->keys = (char **) calloc(sizeof(char *), row_count);
+	cols->keys = (char **) calloc(row_count, sizeof(char *));
 	if (cols->keys == NULL)
 	{
 		free(cols);
 		set_last_result(DATA_CONTROL_ERROR_OUT_OF_MEMORY);
 		return NULL;
 	}
-	cols->vals = (char **) calloc(sizeof(char *), row_count);
+	cols->vals = (char **) calloc(row_count, sizeof(char *));
 	if (cols->vals == NULL)
 	{
 		free(cols->keys);
@@ -426,7 +426,7 @@ data_control_provider_create_update_statement(data_control_h provider, bundle *u
 
 	_LOGI("SQL statement length: %d", sql_len);
 
-	char* sql = (char *) calloc(sizeof(char), sql_len);
+	char* sql = (char *) calloc(sql_len, sizeof(char));
 	if (sql == NULL)
 	{
 		free(data_id);
@@ -509,7 +509,7 @@ data_control_provider_create_select_statement(data_control_h provider, const cha
 
 	_LOGI("SQL statement length: %d", sql_len);
 
-	char* sql = (char *) calloc(sizeof(char), sql_len);
+	char* sql = (char *) calloc(sql_len, sizeof(char));
 	if (sql == NULL)
 	{
 		free(data_id);
