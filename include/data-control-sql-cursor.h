@@ -42,7 +42,8 @@ typedef struct
 	int resultset_content_offset;
 	int resultset_current_offset;
 	int resultset_current_row_count;
-	char* resultset_path;
+	char *resultset_path;
+	int *row_offset_list;
 } resultset_cursor;
 
 /**
@@ -51,7 +52,7 @@ typedef struct
  * @param [in]	path		The path of the file containing the SQL result set
  * @return		A pointer to struct @c resultset_cursor
  */
-resultset_cursor* datacontrol_sql_get_cursor(const char *path);
+resultset_cursor* datacontrol_sql_get_cursor();
 
 /**
  * @brief		Moves the cursor to the first position
