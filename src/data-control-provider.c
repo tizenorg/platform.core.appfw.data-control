@@ -11,6 +11,7 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/socket.h>
 
 #include <appsvc/appsvc.h>
 #include <aul/aul.h>
@@ -22,7 +23,7 @@
 #include "data-control-internal.h"
 
 #define ROW_ID_SIZE				32
-#define RESULT_PATH_MAX  		512
+#define RESULT_PATH_MAX				512
 
 #define RESULT_PAGE_NUMBER		"RESULT_PAGE_NUMBER"
 #define MAX_COUNT_PER_PAGE		"MAX_COUNT_PER_PAGE"
@@ -39,7 +40,7 @@
 #define PACKET_INDEX_COLUMNCOUNT	1
 #define PACKET_INDEX_MAP	2
 
-#define PACKET_INDEX_UPDATEWHERE	3
+#define PACKET_INDEX_UPDATEWHERE	2
 #define PACKET_INDEX_DELETEWHERE	1
 
 #define PACKET_INDEX_MAP_KEY	1
@@ -49,6 +50,7 @@
 #define PACKET_INDEX_MAP_COUNT_PER_PAGE	3
 
 static GHashTable *request_table = NULL;
+static GHashTable *__socket_pair_hash = NULL;
 
 //static pthread_mutex_t provider_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -65,49 +67,290 @@ static datacontrol_provider_map_cb* provider_map_cb = NULL;
 static void* provider_map_user_data = NULL;
 static void* provider_sql_user_data = NULL;
 
-static void
-__free_data(gpointer data)
-{
-	if (data)
-	{
+static void __free_data(gpointer data) {
+
+	if (data) {
 		free(data);
 		data = NULL;
 	}
 }
 
-static void
-__initialize_provider(void)
-{
+static void __initialize_provider(void) {
 	request_table = g_hash_table_new_full(g_int_hash, g_int_equal, __free_data, __free_data);
+	__socket_pair_hash = g_hash_table_new(g_str_hash, g_str_equal);
 }
 
-static int
-__provider_new_request_id(void)
-{
+static int __provider_new_request_id(void) {
 	static int id = 0;
-
 	g_atomic_int_inc(&id);
-
 	return id;
 }
 
-static char*
-__get_client_pkgid(bundle *b)
-{
-	const char *caller_appid = NULL;
-	char *caller_pkgid = NULL;
-	pkgmgrinfo_appinfo_h app_info_handle = NULL;
+static int __send_select_result(int fd, bundle* b, void* data) {
 
-	caller_appid = bundle_get_val(b, AUL_K_CALLER_APPID);
-	pkgmgrinfo_appinfo_get_usr_appinfo(caller_appid, getuid(), &app_info_handle);
-	pkgmgrinfo_appinfo_get_pkgname(app_info_handle, &caller_pkgid);
-	SECURE_LOGI("client pkg id : %s", caller_pkgid);
+	LOGI("__send_select_result");
 
-	return caller_pkgid ? strdup(caller_pkgid) : NULL;
+	// In this function, the result set is written in specified file path as specific form.
+	// [sizeof(int)] row count
+	// [sizeof(int)] column count
+	// [sieeof(int)] total size of column names
+	// [sizeof(int)] column type x N
+	// [  variant  ] column name x N
+	// [sizeof(int)] type
+	// [sizeof(int)] size
+	// [  varient  ] content
+
+	sqlite3_stmt *state = (sqlite3_stmt *)data;
+	int column_count = DATACONTROL_RESULT_NO_DATA;
+	int i = 0;
+	char *column_name = NULL;
+	int total_len_of_column_names = 0;
+	int count_per_page = 0;
+	int page_number = 1;
+	int offset = 0;
+	int offset_idx = 0;
+	int row_count = 0;
+
+	if (b == NULL || data == NULL) {
+		LOGE("The input param is invalid.");
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	if (sqlite3_reset(state) != SQLITE_OK) {
+		LOGE("sqlite3_reset() is failed.");
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	if (sqlite3_step(state) != SQLITE_ROW) {
+		LOGE("The DB does not have another row.");
+		if (write(fd, &column_count, sizeof(int)) == -1)
+			LOGE("Writing a column_count to a file descriptor is failed. errno = %d", errno);
+
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	// 1. column count
+	column_count = sqlite3_column_count(state);
+	if (write(fd, &column_count, sizeof(int)) == -1)
+		LOGE("Writing a column_count to a file descriptor is failed. errno = %d", errno);
+
+	LOGI("Writing a column_count %d", column_count);
+
+	// 2. column type x column_count
+	// #define SQLITE_INTEGER	1
+	// #define SQLITE_FLOAT	2
+	// #define SQLITE_TEXT	3
+	// #define SQLITE_BLOB	4
+	// #define SQLITE_NULL	5
+	for (i = 0; i < column_count; ++i) {
+		int type = sqlite3_column_type(state, i);
+		if (write(fd, &type, sizeof(int)) == -1)
+			LOGI("Writing a type to a file descriptor is failed. errno = %d", errno);
+		LOGI("Writing a column_type %d", type);
+	}
+
+	// 3. column name x column_count
+	for (i = 0; i < column_count; i++) {
+		column_name = (char *)sqlite3_column_name(state, i);
+		if (column_name == NULL)
+			LOGI("sqlite3_column_name is failed. errno = %d", errno);
+		else {
+			column_name = strncat(column_name, "\n", 1);
+			int column_name_len = strlen(column_name);
+			if (write(fd, &column_name_len, sizeof(int)) == -1)
+				LOGI("Writing a column_name_len to a file descriptor is failed. errno = %d", errno);
+
+			LOGI("Writing a column_name_len %d", column_name_len);
+
+			if (write(fd, column_name, column_name_len) == -1)
+				LOGI("Writing a column_name to a file descriptor is failed. errno = %d", errno);
+			total_len_of_column_names += strlen(column_name);
+			LOGI("Writing a column_name %s", column_name);
+		}
+	}
+
+	// 4. total length of column names
+	if (write(fd, &total_len_of_column_names, sizeof(int)) == -1)
+		LOGI("Writing a total_len_of_column_names to a file descriptor is failed. errno = %d", errno);
+
+	LOGI("Writing a total_len_of_column_names %d", total_len_of_column_names);
+
+
+	const char *page_number_str = bundle_get_val(b, RESULT_PAGE_NUMBER);
+	const char *count_per_page_str = bundle_get_val(b, MAX_COUNT_PER_PAGE);
+
+	LOGI("page_number: %s, per_page: %s", page_number_str, count_per_page_str);
+
+	// 5. type, size and value of each element
+	if (page_number_str != NULL)
+		page_number = atoi(page_number_str);
+	else
+		page_number = 1;
+
+	if (count_per_page_str != NULL)
+		count_per_page = atoi(count_per_page_str);
+	else
+		count_per_page = 20;
+
+	offset = (page_number - 1) * count_per_page;
+
+	LOGI("page_number: %d, count_per_page: %d, offset: %d", page_number, count_per_page, offset);
+
+	if (sqlite3_reset(state) != SQLITE_OK) {
+		LOGE("sqlite3_reset() is failed.");
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	if (sqlite3_step(state) != SQLITE_ROW) {
+		LOGE("The DB does not have another row.");
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+	do {
+		offset_idx ++;
+		if (offset_idx > offset)
+			++ row_count;
+	} while(sqlite3_step(state) == SQLITE_ROW && row_count < count_per_page);
+
+	// 6. row count
+	if (write(fd, &row_count, sizeof(int)) == -1)
+		LOGI("Writing a row_count to a file descriptor is failed. errno = %d", errno);
+	LOGI("Writing a row_count %d", row_count);
+
+
+
+	row_count = 0;
+	offset_idx = 0;
+	if (sqlite3_reset(state) != SQLITE_OK) {
+		LOGI("sqlite3_reset() is failed.");
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	if (sqlite3_step(state) != SQLITE_ROW) {
+		LOGE("The DB does not have another row.");
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+	do {
+		offset_idx ++;
+		if (offset_idx > offset) {
+			++ row_count;
+			for (i = 0; i < column_count; ++ i) {
+				int type = 0;
+				int size = 0;
+				void* value = NULL;
+				bool is_null_type = false;
+				int column_type = sqlite3_column_type(state, i);
+				long long tmp_long = 0;
+				double tmp_double = 0.0;
+				switch (column_type) {
+					case SQLITE_INTEGER:
+							type = 1;
+							size = sizeof(long long);
+							tmp_long = sqlite3_column_int64(state, i);
+							value = &tmp_long;
+							break;
+
+					case SQLITE_FLOAT:
+							type = 2;
+							size = sizeof(double);
+							tmp_double = sqlite3_column_double(state, i);
+							value =&tmp_double;
+							break;
+
+					case SQLITE_TEXT:
+							type = 3;
+							value = (char *)sqlite3_column_text(state, i);
+							size = strlen(value) + 1;
+							break;
+					case SQLITE_BLOB:
+							type = 4;
+							size = sqlite3_column_bytes(state, i);
+							value = (char *)sqlite3_column_blob(state, i);
+							break;
+					case SQLITE_NULL:
+							type = 5;
+							size = 0;
+							is_null_type = true;
+							break;
+					default:
+							LOGI("The column type is invalid.");
+							break;
+				}
+
+				if (write(fd, &type, sizeof(int)) == -1)
+					LOGI("Writing a type to a file descriptor is failed. errno = %d", errno);
+
+				LOGI("Writing a type %d", type);
+				if (write(fd, &size, sizeof(int)) == -1)
+					LOGI("Writing a size to a file descriptor is failed. errno = %d", errno);
+
+				LOGI("Writing a size %d", size);
+				if (size > 0 && size < INT_MAX && !is_null_type) {
+					if (type == 1)
+						LOGI("Writing a value !!! %ld %ld", *(long long *)value, tmp_long);
+					else
+						LOGI("Writing a value %s", value);
+
+					if (write(fd, value, size) == -1)
+						LOGI("Writing a value to a file descriptor is failed. errno = %d", errno);
+
+				}
+
+			}
+			LOGI("row_count ~~~~ %d", row_count);
+
+		}
+
+	} while(sqlite3_step(state) == SQLITE_ROW && row_count < count_per_page);
+
+	return DATACONTROL_ERROR_NONE;
 }
 
-static bundle*
-__get_data_sql(const char *path, int column_count)
+int __datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type type, void *data) {
+
+	LOGE("send async ~~~");
+
+	bundle_raw *kb_data = NULL;
+	int ret = DATACONTROL_ERROR_NONE;
+	int datalen;
+	char *buf = NULL;
+	int total_len;
+	int write_len;
+
+	int i = 1;
+
+	bundle_encode(kb, &kb_data, &datalen);
+	if (kb_data == NULL) {
+		LOGE("bundle encode error");
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+
+	buf = (char *)calloc(datalen + 1 + 4, sizeof(char));
+	memcpy(buf, &datalen, sizeof(datalen));
+	memcpy(buf + sizeof(datalen), kb_data, datalen);
+
+	total_len = sizeof(datalen) + datalen;
+
+	LOGI("write : %d, %d", i, datalen);
+	write_len = write(sockfd, buf, total_len);
+	if (total_len != write_len) {
+		LOGI("write data fail : %d", write_len);
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	if (DATACONTROL_TYPE_SQL_SELECT == type)
+		__send_select_result(sockfd, kb, data);
+
+out:
+	if (buf)
+		free(buf);
+
+	return ret;
+}
+
+
+
+static bundle* __get_data_sql(int fd, int column_count)
 {
 	bundle* b = bundle_create();
 
@@ -116,18 +359,8 @@ __get_data_sql(const char *path, int column_count)
 	size_t size = 0;
 	char *key = NULL;
 	char *value = NULL;
-	int fd = 0;
-	int ret = 0;
 
-	SECURE_LOGI("The request file of INSERT/UPDATE: %s", path);
-
-	/* TODO - shoud be changed to solve security concerns */
-	fd = open(path, O_RDONLY, 0644);
-	if (fd == -1) {
-		SECURE_LOGE("unable to open insert_map file: %d", errno);
-		return b;
-	}
-
+	SECURE_LOGI("The get data from socket INSERT/UPDATE: %d", fd);
 	for (i = 0; i < column_count; i++)
 	{
 		size = read(fd, &len, sizeof(int));
@@ -172,228 +405,13 @@ __get_data_sql(const char *path, int column_count)
 		free(value);
 	}
 
-	fsync(fd);
-	close(fd);
-	ret = remove(path);
-	if (ret == -1)
-	{
-		SECURE_LOGE("unable to remove the request file of INSERT/UPDATE(%s). errno = %d", path, errno);
-	}
-
 	return b;
 }
 
 static int
-__set_select_result(bundle* b, const char* path, void* data)
+__set_get_value_result(bundle *b, char **value_list)
 {
-	LOGI("__set_select_result");
-	// The provider application should call the sqlite3_open().
-	// and it also should call the sqlite3_prepare_v2() in datacontrol_provider_sql_select_request_cb().
-	// and then, it should call the datacontrol_provider_send_select_result() with a pointer to sqlite3_stmt.
-	// The 3rd param 'data' is the pointer to sqlite3_stmt.
-
-	// In this function, the result set is written in specified file path as specific form.
-	// [sizeof(int)] row count
-	// [sizeof(int)] column count
-	// [sieeof(int)] total size of column names
-	// [sizeof(int)] column type x N
-	// [  variant  ] column name x N
-	// [sizeof(int)] type
-	// [sizeof(int)] size
-	// [  varient  ] content
-
-	int column_count = 0;
-	int i = 0;
-	char *column_name = NULL;
-	int total_len_of_column_names = 0;
-	int count_per_page = 0;
-	int row_count = 0;
-	sqlite3_stmt *state = (sqlite3_stmt *)data;
-	int fd = 0;
-	char *client_pkgid = NULL;
-
-	if (b ==NULL || path == NULL || data == NULL)
-	{
-		LOGE("The input param is invalid.");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	if (sqlite3_reset(state) != SQLITE_OK)
-	{
-		LOGE("sqlite3_reset() is failed.");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	if (sqlite3_step(state) != SQLITE_ROW)
-	{
-		LOGE("The DB does not have another row.");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	client_pkgid = __get_client_pkgid(b);
-
-	/* TODO - shoud be changed to solve security concerns */
-	fd = open(path, O_WRONLY | O_CREAT, 0644);
-	if (fd == -1) {
-		SECURE_LOGE("unable to open insert_map file: %d", errno);
-		free(client_pkgid);
-		return DATACONTROL_ERROR_IO_ERROR;
-	}
-	free(client_pkgid);
-
-	// 1. column count
-	column_count = sqlite3_column_count(state);
-	if (lseek(fd, sizeof(int), SEEK_SET) == -1)
-	{
-		LOGE("lseek is failed. errno =  %d", errno);
-	}
-	if (write(fd, &column_count, sizeof(int)) == -1)
-	{
-		LOGE("Writing a column_count to a file descriptor is failed. errno = %d", errno);
-	}
-
-	// 2. column type x column_count
-	// #define SQLITE_INTEGER	1
-	// #define SQLITE_FLOAT	2
-	// #define SQLITE_TEXT	3
-	// #define SQLITE_BLOB	4
-	// #define SQLITE_NULL	5
-	if (lseek(fd, sizeof(int), SEEK_CUR) == -1)
-	{
-		LOGE("lseek is failed. errno =  %d", errno);
-	}
-
-	for (i = 0; i < column_count; ++i)
-	{
-		int type = sqlite3_column_type(state, i);
-		if (write(fd, &type, sizeof(int)) == -1)
-		{
-			LOGE("Writing a type to a file descriptor is failed. errno = %d", errno);
-		}
-	}
-
-	// 3. column name x column_count
-	for (i = 0; i < column_count; i++)
-	{
-		column_name = (char *)sqlite3_column_name(state, i);
-		column_name = strcat(column_name, "\n");
-		if (write(fd, column_name, strlen(column_name)) == -1)
-		{
-			LOGE("Writing a column_name to a file descriptor is failed. errno = %d", errno);
-		}
-		total_len_of_column_names += strlen(column_name);
-	}
-
-	// 4. total length of column names
-	if (lseek(fd, sizeof(int) * 2, SEEK_SET) == -1)
-	{
-		LOGE("lseek is failed. errno =  %d", errno);
-	}
-	if (write(fd, &total_len_of_column_names, sizeof(int)) == -1)
-	{
-		LOGE("Writing a total_len_of_column_names to a file descriptor is failed. errno = %d", errno);
-	}
-	// 5. type, size and value of each element
-	if (lseek(fd, (sizeof(int) * column_count) + total_len_of_column_names, SEEK_CUR) == -1)
-	{
-		LOGE("lseek is failed. errno =  %d", errno);
-	}
-	count_per_page = atoi(bundle_get_val(b, MAX_COUNT_PER_PAGE));
-	do
-	{
-		for (i = 0; i < column_count; ++i)
-		{
-			int type = 0;
-			int size = 0;
-			void* value = NULL;
-			bool is_null_type = false;
-			int column_type = sqlite3_column_type(state, i);
-			long long tmp_long = 0;
-			double tmp_double = 0.0;
-			switch (column_type)
-			{
-				case SQLITE_INTEGER:
-				{
-					type = 1;
-					size = sizeof(long long);
-					tmp_long = sqlite3_column_int64(state, i);
-					value = &tmp_long;
-					break;
-				}
-				case SQLITE_FLOAT:
-				{
-					type = 2;
-					size = sizeof(double);
-					tmp_double = sqlite3_column_double(state, i);
-					value =&tmp_double;
-					break;
-				}
-				case SQLITE_TEXT:
-				{
-					type = 3;
-					value = (char *)sqlite3_column_text(state, i);
-					size = strlen(value);
-					break;
-				}
-				case SQLITE_BLOB:
-				{
-					type = 4;
-					size = sqlite3_column_bytes(state, i);
-					value = (char *)sqlite3_column_blob(state, i);
-					break;
-				}
-				case SQLITE_NULL:
-				{
-					type = 5;
-					size = 0;
-					is_null_type = true;
-					break;
-				}
-				default:
-				{
-					LOGE("The column type is invalid.");
-					break;
-				}
-			}
-
-			if (write(fd, &type, sizeof(int)) == -1)
-			{
-				LOGE("Writing a type to a file descriptor is failed. errno = %d", errno);
-			}
-			if (write(fd, &size, sizeof(int)) == -1)
-			{
-				LOGE("Writing a size to a file descriptor is failed. errno = %d", errno);
-			}
-			if (size > 0 && !is_null_type)
-			{
-				if (write(fd, value, size) == -1)
-				{
-					LOGE("Writing a value to a file descriptor is failed. errno = %d", errno);
-				}
-			}
-		}
-		++row_count;
-	} while(sqlite3_step(state) == SQLITE_ROW && row_count < count_per_page);
-
-	// 6. row count
-	if (lseek(fd, 0, SEEK_SET) == -1)
-	{
-		LOGE("lseek is failed. errno =  %d", errno);
-	}
-	if (write(fd, &row_count, sizeof(int)) == -1)
-	{
-		LOGE("Writing a row_count to a file descriptor is failed. errno = %d", errno);
-	}
-	close(fd);
-
-
-	return DATACONTROL_ERROR_NONE;
-}
-
-static int
-__set_get_value_result(bundle *b, const char* path, char **value_list)
-{
-	int i = 0;
+/*  	int i = 0;
 	int fd = -1;
 	char *client_pkgid = NULL;
 
@@ -426,7 +444,6 @@ __set_get_value_result(bundle *b, const char* path, char **value_list)
 	}
 
 	client_pkgid = __get_client_pkgid(b);
-	/* TODO - shoud be changed to solve security concerns */
 	fd = open(path, O_WRONLY | O_CREAT, 0644);
 	if (fd == -1) {
 		SECURE_LOGE("unable to open insert_map file: %d", errno);
@@ -449,36 +466,13 @@ __set_get_value_result(bundle *b, const char* path, char **value_list)
 	}
 
 	fsync(fd);
-	close(fd);
+	close(fd);*/
 	return DATACONTROL_ERROR_NONE;
 }
 
-static char*
-__get_result_file_path(bundle *b)
-{
-	LOGI("__get_result_file_path");
-	const char *caller = bundle_get_val(b, AUL_K_CALLER_APPID);
-	if (!caller)
-	{
-		LOGE("caller appid is NULL.");
-		return NULL;
-	}
+static bundle* __set_result(bundle* b, datacontrol_request_type type, void* data) {
 
-	const char *caller_req_id = bundle_get_val(b, OSP_K_REQUEST_ID);
-
-	char *result_path = calloc(RESULT_PATH_MAX, sizeof(char));
-	snprintf(result_path, RESULT_PATH_MAX, "%s%s%s", DATACONTROL_RESULT_FILE_PREFIX, caller, caller_req_id);
-
-	SECURE_LOGI("result file path: %s", result_path);
-
-	return result_path;
-}
-
-static bundle*
-__set_result(bundle* b, datacontrol_request_type type, void* data)
-{
-	bundle* res;
-	aul_create_result_bundle(b, &res);
+	bundle* res = bundle_create();
 
 	// Set the type
 	char type_str[MAX_LEN_DATACONTROL_REQ_TYPE] = {0,};
@@ -506,6 +500,9 @@ __set_result(bundle* b, datacontrol_request_type type, void* data)
 	char *request_id = (char*)bundle_get_val(b, OSP_K_REQUEST_ID);
 	bundle_add_str(res, OSP_K_REQUEST_ID, request_id);
 
+	char *caller_appid = (char*)bundle_get_val(b, AUL_K_CALLER_APPID);
+	bundle_add_str(res, AUL_K_CALLER_APPID, caller_appid);
+
 	switch(type)
 	{
 		case DATACONTROL_TYPE_SQL_SELECT:
@@ -515,29 +512,29 @@ __set_result(bundle* b, datacontrol_request_type type, void* data)
 			list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
 			list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
 
-			char *path = __get_result_file_path(b);
-			if (path != NULL)
+			//__send_select_result(b, data, return_data);
+			/*
+			if (ret < 0)
 			{
-				int ret = __set_select_result(b, path, data);
-				if (ret < 0)
-				{
-					memset(path, 0, RESULT_PATH_MAX);
-					strcpy(path, "NoResultSet");
-					LOGI("Empty ResultSet");
-				}
-				list[PACKET_INDEX_SELECT_RESULT_FILE] = path;
+				memset(path, 0, RESULT_PATH_MAX);
+				strcpy(path, "NoResultSet");
+				LOGI("Empty ResultSet");
 			}
-			else
-			{
-				list[PACKET_INDEX_SELECT_RESULT_FILE] = DATACONTROL_EMPTY;
-			}
+			list[PACKET_INDEX_SELECT_RESULT_FILE] = path;
+			*/
+
+
+
+			const char *page_num = bundle_get_val(b, RESULT_PAGE_NUMBER);
+			const char *count_per_page = bundle_get_val(b, MAX_COUNT_PER_PAGE);
+
+			LOGI("page num: %s, count_per_page: %s", page_num, count_per_page);
+
+			bundle_add_str(res, RESULT_PAGE_NUMBER, page_num);
+			bundle_add_str(res, MAX_COUNT_PER_PAGE, count_per_page);
 
 			bundle_add_str_array(res, OSP_K_ARG, list, 3);
 
-			if (path != NULL)
-			{
-				free(path);
-			}
 
 			break;
 		}
@@ -572,30 +569,13 @@ __set_result(bundle* b, datacontrol_request_type type, void* data)
 		case DATACONTROL_TYPE_MAP_GET:
 		{
 			const char* list[4];
-
 			list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
 			list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
 
-			char *path = __get_result_file_path(b);
-			if (path != NULL)
-			{
-				char **value_list = (char **)data;
-				__set_get_value_result(b, path, value_list);
-				list[PACKET_INDEX_VALUE_COUNT] = bundle_get_val(b, RESULT_VALUE_COUNT);	// value count
-				list[PACKET_INDEX_GET_RESULT_FILE] = path;
-			}
-			else
-			{
-				list[PACKET_INDEX_VALUE_COUNT] = 0;	// value count
-				list[PACKET_INDEX_GET_RESULT_FILE] = DATACONTROL_EMPTY;
-			}
-
+			char **value_list = (char **)data;
+			__set_get_value_result(b, value_list);
+			list[PACKET_INDEX_VALUE_COUNT] = bundle_get_val(b, RESULT_VALUE_COUNT);	// value count
 			bundle_add_str_array(res, OSP_K_ARG, list, 4);
-
-			if (path != NULL)
-			{
-				free(path);
-			}
 
 			break;
 		}
@@ -622,71 +602,37 @@ __set_result(bundle* b, datacontrol_request_type type, void* data)
 	return res;
 }
 
-static int
-__send_result(bundle* b, datacontrol_request_type type)
-{
-	int ret = aul_send_service_result(b);
+static int __send_result(bundle* b, datacontrol_request_type type, void *data) {
 
-	if (ret < 0)
-	{
-		LOGE("Fail to send a result to caller");
+	int *socketpair;
+	char *caller_app_id = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
 
-		int index = 0;
+	LOGI("__datacontrol_send_async caller_app_id : %s ", caller_app_id);
 
-		switch (type)
-		{
-			case DATACONTROL_TYPE_SQL_SELECT:
-			{
-				index = PACKET_INDEX_SELECT_RESULT_FILE;
-				break;
-			}
-			case DATACONTROL_TYPE_MAP_GET:
-			{
-				index = PACKET_INDEX_GET_RESULT_FILE;
-				break;
-			}
-			default:
-			{
-				bundle_free(b);
-				return DATACONTROL_ERROR_IO_ERROR;
-			}
-		}
+	socketpair = g_hash_table_lookup(__socket_pair_hash, caller_app_id);
 
-		int len = 0;
-		const char **str_arr = bundle_get_str_array(b, OSP_K_ARG, &len);
-		SECURE_LOGI("result file: %s (%d)", str_arr[index], index);
-		ret = remove(str_arr[index]);
-		if (ret == -1)
-		{
-			SECURE_LOGE("unable to remove the result file. errno = %d", errno);
-		}
+	LOGI("send data from provider !!!");
+	int ret = __datacontrol_send_async(*socketpair, b, type, data);
 
-		bundle_free(b);
-		return DATACONTROL_ERROR_IO_ERROR;
-	}
+	LOGI("__datacontrol_send_async result : %d ", ret);
 
 	bundle_free(b);
 	return DATACONTROL_ERROR_NONE;
 }
 
-int
-__datacontrol_handler_cb(bundle *b, int request_id, void* data)
-{
-	LOGI("datacontrol_handler_cb");
+
+int __provider_process(bundle *b, int fd) {
 
 	const char *request_type = bundle_get_val(b, OSP_K_DATACONTROL_REQUEST_TYPE);
-	if (request_type == NULL)
-	{
+	if (request_type == NULL) {
 		LOGE("Invalid data control request");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
 	// Get the request type
 	datacontrol_request_type type = atoi(request_type);
-	if (type >= DATACONTROL_TYPE_SQL_SELECT && type <= DATACONTROL_TYPE_SQL_DELETE)
-	{
-		if (provider_sql_cb == NULL)
-		{
+	if (type >= DATACONTROL_TYPE_SQL_SELECT && type <= DATACONTROL_TYPE_SQL_DELETE)	{
+		if (provider_sql_cb == NULL) {
 			LOGE("SQL callback is not registered.");
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
 		}
@@ -728,10 +674,9 @@ __datacontrol_handler_cb(bundle *b, int request_id, void* data)
 	bundle *value = bundle_dup(b);
 	g_hash_table_insert(request_table, key, value);
 
-	switch (type)
-	{
-		case DATACONTROL_TYPE_SQL_SELECT:
-			{
+	switch (type) {
+		case DATACONTROL_TYPE_SQL_SELECT: {
+
 				int i = 1;
 				int current = 0;
 				int column_count = atoi(arg_list[i++]); // Column count
@@ -740,10 +685,8 @@ __datacontrol_handler_cb(bundle *b, int request_id, void* data)
 
 				const char** column_list = (const char**)malloc(column_count * (sizeof(char *)));
 
-				while (current < column_count)
-				{
+				while (current < column_count) {
 					column_list[current++] = arg_list[i++];  // Column data
-
 					LOGI("Column %d: %s", current, column_list[current-1]);
 				}
 
@@ -752,28 +695,20 @@ __datacontrol_handler_cb(bundle *b, int request_id, void* data)
 
 				LOGI("where: %s, order: %s", where, order);
 
-				if (strncmp(where, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0)
-				{
+				if (strncmp(where, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0) {
 					where = NULL;
 				}
 
-				if (strncmp(order, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0)
-				{
+				if (strncmp(order, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0) {
 					order = NULL;
 				}
-
 				const char *page_number = arg_list[i++];
 				const char *per_page =  arg_list[i];
 
+				LOGI("page_number: %s, per_page: %s", page_number, per_page);
+
 				bundle_add_str(value, RESULT_PAGE_NUMBER, page_number);
 				bundle_add_str(value, MAX_COUNT_PER_PAGE, per_page);
-
-				char *statement = _datacontrol_create_select_statement(provider->data_id, column_list, column_count, where, order, atoi(page_number), atoi(per_page));
-
-				// Add a select statement to the bundle
-				bundle_add_str(value, DATACONTROL_SELECT_STATEMENT, statement);
-
-				free(statement);
 
 				provider_sql_cb->select(provider_req_id, provider, column_list, column_count, where, order, provider_sql_user_data);
 
@@ -781,20 +716,21 @@ __datacontrol_handler_cb(bundle *b, int request_id, void* data)
 
 				break;
 			}
+
 		case DATACONTROL_TYPE_SQL_INSERT:
 		case DATACONTROL_TYPE_SQL_UPDATE:
 			{
+
 				int column_count = atoi(arg_list[PACKET_INDEX_COLUMNCOUNT]);
-				const char *sql_path = arg_list[PACKET_INDEX_MAP];
 
 				LOGI("INSERT / UPDATE handler");
-				SECURE_LOGI("Data path: %s, Column count: %d", sql_path, column_count);
+				SECURE_LOGI("Column count: %d", column_count);
 
-				bundle* sql = __get_data_sql(sql_path, column_count);
+				bundle* sql = __get_data_sql(fd, column_count);
 
 				if (type == DATACONTROL_TYPE_SQL_INSERT)
 				{
-					SECURE_LOGI("INSERT column count: %d, sql_path: %s", column_count, sql_path);
+					SECURE_LOGI("INSERT column count: %d", column_count);
 					provider_sql_cb->insert(provider_req_id, provider, sql, provider_sql_user_data);
 				}
 				else
@@ -811,7 +747,8 @@ __datacontrol_handler_cb(bundle *b, int request_id, void* data)
 
 				bundle_free(sql);
 				break;
-			}
+			 }
+
 		case DATACONTROL_TYPE_SQL_DELETE:
 			{
 				const char *where = arg_list[PACKET_INDEX_DELETEWHERE];
@@ -874,6 +811,108 @@ __datacontrol_handler_cb(bundle *b, int request_id, void* data)
 
 	free(provider);
 
+	return DATACONTROL_ERROR_NONE;
+}
+
+gboolean __provider_recv_message(GIOChannel *channel,
+		GIOCondition cond,
+		gpointer data) {
+
+	gint fd = g_io_channel_unix_get_fd(channel);
+	gboolean retval = TRUE;
+
+	LOGI("__provider_recv_message : ...from %d:%s%s%s%s\n", fd,
+			(cond & G_IO_ERR) ? " ERR" : "",
+			(cond & G_IO_HUP) ? " HUP" : "",
+			(cond & G_IO_IN)  ? " IN"  : "",
+			(cond & G_IO_PRI) ? " PRI" : "");
+
+	if (cond & (G_IO_ERR | G_IO_HUP))
+		retval = FALSE;
+
+	if (cond & G_IO_IN) {
+		char *buf;
+		int nbytes;
+		guint nb;
+
+		if (_read_socket_pair(fd, (gchar *)&nbytes, sizeof(nbytes), &nb) != DATACONTROL_ERROR_NONE)
+			return FALSE;
+
+		LOGI("nbytes : %d", nbytes);
+
+		if (nb == 0) {
+			LOGI("__provider_recv_message : ...from %d: EOF\n", fd);
+			return FALSE;
+		}
+
+		LOGI("__provider_recv_message: ...from %d: %d bytes\n", fd, nbytes);
+		if (nbytes > 0) {
+			bundle *kb = NULL;
+
+			buf = (char *) calloc(nbytes + 1, sizeof(char));
+
+			if (_read_socket_pair(fd, buf, nbytes, &nb) != DATACONTROL_ERROR_NONE)
+				return FALSE;
+
+			if (nb == 0) {
+				LOGI("__provider_recv_message: nb 0 : EOF\n");
+				return FALSE;
+			}
+
+			kb = bundle_decode((bundle_raw *)buf, nbytes);
+			__provider_process(kb, fd);
+		}
+	}
+	return retval;
+}
+
+
+
+
+
+int
+__datacontrol_handler_cb(bundle *b, int request_id, void* data)
+{
+	LOGI("datacontrol_handler_cb");
+	int *socketpair;
+
+	char *caller = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
+	char *callee = (char *)bundle_get_val(b, AUL_K_CALLEE_APPID);
+
+	socketpair = g_hash_table_lookup(__socket_pair_hash, caller);
+
+	if (socketpair == NULL) {
+
+		socketpair = (int *)calloc(1, sizeof(int));
+
+		bundle *sock_bundle = bundle_create();
+		bundle_add_str(sock_bundle, AUL_K_CALLER_APPID, caller);
+		bundle_add_str(sock_bundle, AUL_K_CALLEE_APPID, callee);
+		bundle_add_str(sock_bundle, "DATA_CONTOL_TYPE", "provider");
+
+		LOGE("caller, callee : %s, %s", caller, callee);
+		aul_request_socket_pair(sock_bundle, socketpair);
+
+		LOGE("provider socket pair : %d", *socketpair);
+		if(*socketpair > 0) {
+			g_hash_table_insert(__socket_pair_hash, strdup(caller), socketpair);
+
+
+			GIOChannel *gio_read = NULL;
+			gio_read = g_io_channel_unix_new(*socketpair);
+			if (!gio_read) {
+				LOGE("Error is %s\n", strerror(errno));
+				return -1;
+			}
+			int g_src_id = g_io_add_watch(gio_read, G_IO_IN | G_IO_HUP,
+					__provider_recv_message, NULL);
+			if (g_src_id == 0) {
+				LOGE("fail to add watch on socket");
+				return -1;
+			}
+
+		}
+	}
 	return DATACONTROL_ERROR_NONE;
 }
 
@@ -1004,8 +1043,7 @@ datacontrol_provider_send_select_result(int request_id, void *db_handle)
 	}
 
 	bundle* res = __set_result(b, DATACONTROL_TYPE_SQL_SELECT, db_handle);
-
-	return __send_result(res, DATACONTROL_TYPE_SQL_SELECT);
+	return __send_result(res, DATACONTROL_TYPE_SQL_SELECT, db_handle);
 }
 
 int
@@ -1027,7 +1065,7 @@ datacontrol_provider_send_insert_result(int request_id, long long row_id)
 
 	bundle* res = __set_result(b, DATACONTROL_TYPE_SQL_INSERT, (void*)&row_id);
 
-	return __send_result(res, DATACONTROL_TYPE_SQL_INSERT);
+	return __send_result(res, DATACONTROL_TYPE_SQL_INSERT, NULL);
 }
 
 int
@@ -1049,7 +1087,7 @@ datacontrol_provider_send_update_result(int request_id)
 
 	bundle* res = __set_result(b, DATACONTROL_TYPE_SQL_UPDATE, NULL);
 
-	return __send_result(res, DATACONTROL_TYPE_SQL_UPDATE);
+	return __send_result(res, DATACONTROL_TYPE_SQL_UPDATE, NULL);
 }
 
 int
@@ -1071,7 +1109,7 @@ datacontrol_provider_send_delete_result(int request_id)
 
 	bundle* res = __set_result(b, DATACONTROL_TYPE_SQL_DELETE, NULL);
 
-	return __send_result(res, DATACONTROL_TYPE_SQL_DELETE);
+	return __send_result(res, DATACONTROL_TYPE_SQL_DELETE, NULL);
 }
 
 int
@@ -1093,7 +1131,7 @@ datacontrol_provider_send_error(int request_id, const char *error)
 
 	bundle* res = __set_result(b, DATACONTROL_TYPE_ERROR, (void*)error);
 
-	return __send_result(res, DATACONTROL_TYPE_ERROR);
+	return __send_result(res, DATACONTROL_TYPE_ERROR, NULL);
 }
 
 int
@@ -1115,7 +1153,7 @@ datacontrol_provider_send_map_result(int request_id)
 
 	bundle* res = __set_result(b, DATACONTROL_TYPE_UNDEFINED, NULL);
 
-	return __send_result(res, DATACONTROL_TYPE_UNDEFINED);
+	return __send_result(res, DATACONTROL_TYPE_UNDEFINED, NULL);
 }
 
 int
@@ -1141,5 +1179,5 @@ datacontrol_provider_send_map_get_value_result(int request_id, char **value_list
 
 	bundle* res = __set_result(b, DATACONTROL_TYPE_MAP_GET, value_list);
 
-	return __send_result(res, DATACONTROL_TYPE_MAP_GET);
+	return __send_result(res, DATACONTROL_TYPE_MAP_GET, NULL);
 }
