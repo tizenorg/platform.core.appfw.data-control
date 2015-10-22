@@ -23,6 +23,7 @@
 #define _APPFW_DATA_CONTROL_SQL_ENUMERATOR_H_
 
 #include <stdio.h>
+#include <sqlite3.h>
 #include "data-control-types.h"
 
 #ifdef __cplusplus
@@ -35,14 +36,15 @@ extern "C" {
 typedef struct
 {
 	int resultset_fd;
-	int resultset_row_count;
+	sqlite3_int64 resultset_row_count;
 	int resultset_col_count;
-	int resultset_col_type_offset;
-	int resultset_col_name_offset;
-	int resultset_content_offset;
-	int resultset_current_offset;
-	int resultset_current_row_count;
-	char* resultset_path;
+	off_t resultset_col_type_offset;
+	off_t resultset_col_name_offset;
+	off_t resultset_content_offset;
+	off_t resultset_current_offset;
+	sqlite3_int64 resultset_current_row_count;
+	char *resultset_path;
+	off_t *row_offset_list;
 } resultset_cursor;
 
 /**
@@ -51,7 +53,7 @@ typedef struct
  * @param [in]	path		The path of the file containing the SQL result set
  * @return		A pointer to struct @c resultset_cursor
  */
-resultset_cursor* datacontrol_sql_get_cursor(const char *path);
+resultset_cursor* datacontrol_sql_get_cursor();
 
 /**
  * @brief		Moves the cursor to the first position
