@@ -5,16 +5,59 @@
 #include <string.h>
 #include <unistd.h>
 #include <glib.h>
+#include <gio/gio.h>
 #include <pthread.h>
+#include <aul.h>
 
 #include <bundle.h>
+#include <bundle_internal.h>
 #include <pkgmgr-info.h>
+
+#include <sys/socket.h>
+
+#include <sqlite3.h>
 
 #include "data-control-sql-cursor.h"
 #include "data-control-internal.h"
 
 #define MAX_COLUMN_SIZE				512
 #define MAX_STATEMENT_SIZE			1024
+#define RESULT_VALUE_COUNT			"RESULT_VALUE_COUNT"
+#define MAX_COUNT_PER_PAGE		"MAX_COUNT_PER_PAGE"
+#define RESULT_PAGE_NUMBER		"RESULT_PAGE_NUMBER"
+
+#define BUFSIZE 512
+
+
+int _read_socket_pair(int fd,
+		char *buffer,
+		guint nbytes,
+		guint *bytes_read) {
+
+	guint left = nbytes;
+	gsize nb;
+	GError *error = NULL;
+	char *bufp = buffer;
+
+	*bytes_read = 0;
+	while (left) {
+		LOGE("gio-test: ...from %d: left %d\n", fd, left);
+		nb = read(fd, bufp, left);
+		LOGE("gio-test: ...from %d: nb %d\n", fd, nb);
+		if (error != NULL) {
+			LOGE("gio-test: ...from %d: %s\n", fd, error->message);
+			g_error_free(error);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+		if (nb == 0)
+			return DATACONTROL_ERROR_IO_ERROR;
+		left -= nb;
+		bufp += nb;
+		*bytes_read += nb;
+	}
+	return DATACONTROL_ERROR_NONE;
+}
+
 
 int
 _datacontrol_sql_get_cursor(const char *path)
