@@ -48,6 +48,12 @@ int datacontrol_check_privilege(privilege_type check_type) {
 	char uid[10] = {0,};
 	char *client_session = "";
 
+	static bool checked_privilege = FALSE;
+
+	if (checked_privilege) {
+		return DATA_CONTROL_ERROR_NONE;
+	}
+
 	ret = cynara_initialize(&p_cynara, NULL);
 	if (ret != CYNARA_API_SUCCESS) {
 		LOGE("cannot init cynara [%d] failed!", ret);
@@ -91,6 +97,7 @@ int datacontrol_check_privilege(privilege_type check_type) {
 	}
 
 	ret = DATA_CONTROL_ERROR_NONE;
+	checked_privilege = TRUE;
 out:
 
 	if (p_cynara)
