@@ -18,6 +18,7 @@
  * @file	data-control-internal.h
  * @brief	This is the header file for private keys of the data-control.
  */
+#include <gio/gio.h>
 
 #ifndef _APPFW_DATA_CONTROL_INTERNAL_H_
 #define _APPFW_DATA_CONTROL_INTERNAL_H_
@@ -39,14 +40,13 @@
 #define OSP_K_DATACONTROL_PROTOCOL_VERSION	"__OSP_DATACONTROL_PROTOCOL_VERSION__"
 #define OSP_K_CALLER_TYPE   "__OSP_CALLER_TYPE__"
 
-#define DATACONTROL_SELECT_STATEMENT 	"DATACONTROL_SELECT_STATEMENT"
+#define DATACONTROL_SELECT_STATEMENT	"DATACONTROL_SELECT_STATEMENT"
 
-#define DATACONTROL_EMPTY 		"NULL"
+#define DATACONTROL_EMPTY		"NULL"
 #define DATACONTROL_SELECT_EXTRA_COUNT		6  // data id, column count, where, order, page, per_page
+#define DATACONTROL_RESULT_NO_DATA	-1
 
-
-
-#define OSP_V_LAUNCH_TYPE_DATACONTROL  	"datacontrol"
+#define OSP_V_LAUNCH_TYPE_DATACONTROL	"datacontrol"
 #define OSP_V_VERSION_2_1_0_3  "ver_2.1.0.3"
 #define OSP_V_CALLER_TYPE_OSP  "osp"
 
@@ -72,6 +72,18 @@ typedef enum
 	DATACONTROL_TYPE_MAX = 255
 } datacontrol_request_type;
 
+typedef struct datacontrol_pkt {
+	int len;
+	unsigned char data[1];
+} datacontrol_pkt_s;
+
+typedef struct datacontrol_socket {
+	GIOChannel *gio_read;
+	int g_src_id;
+	int socket_pair;
+} datacontrol_socket_info;
+
+
 int
 datacontrol_sql_set_cursor(const char *path);
 
@@ -80,6 +92,17 @@ _datacontrol_create_select_statement(char *data_id, const char **column_list, in
 
 int
 _datacontrol_create_request_id(void);
+
+int _datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type type, void *data);
+int _read_socket_pair(int fd, char *buffer, guint nbytes, guint *bytes_read);
+
+gboolean _datacontrol_recv_message(GIOChannel *channel, GIOCondition cond, gpointer data);
+int _get_gdbus_shared_connection(GDBusConnection **connection, char *provider_id);
+void _socket_info_free (gpointer socket);
+datacontrol_socket_info * _get_socket_info(const char *caller_id, const char *callee_id, const char *type, GIOFunc cb, void *data);
+int _request_appsvc_run(const char *caller_id, const char *callee_id);
+
+
 
 #endif /* _APPFW_DATA_CONTROL_INTERNAL_H_ */
 
