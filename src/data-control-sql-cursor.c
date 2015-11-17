@@ -34,9 +34,9 @@ int datacontrol_sql_step_next(resultset_cursor *cursor)
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
-	if (cursor->resultset_current_offset == 0)
+	if (cursor->resultset_current_offset == 0) {
 		cursor->resultset_current_offset = cursor->resultset_content_offset;
-	else {
+	} else {
 		if (!(cursor->resultset_current_row_count < (cursor->resultset_row_count - 1))) {
 			LOGE("Reached to the end of the result set");
 			return DATACONTROL_ERROR_IO_ERROR;

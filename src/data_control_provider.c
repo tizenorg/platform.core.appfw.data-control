@@ -213,7 +213,7 @@ static void bundle_foreach_cb(const char *key, const int type, const bundle_keyv
 EXPORT_API char *data_control_provider_create_insert_statement(data_control_h provider, bundle *insert_map)
 {
 	int row_count = bundle_get_count(insert_map);
-	if (provider == NULL || row_count == 0)	{
+	if (provider == NULL || row_count == 0) {
 		set_last_result(DATA_CONTROL_ERROR_INVALID_PARAMETER);
 		return NULL;
 	}
@@ -244,14 +244,14 @@ EXPORT_API char *data_control_provider_create_insert_statement(data_control_h pr
 	int index = 0;
 	bundle_foreach(insert_map, bundle_foreach_cb, (void *)(cols));
 
-	char* data_id = NULL;
+	char *data_id = NULL;
 	data_control_sql_get_data_id(provider, &data_id);
 
 	int sql_len = INSERT_STMT_CONST_LEN + strlen(data_id) + (row_count - 1) * 4 + (cols->length) + 1;
 
 	_LOGI("SQL statement length: %d", sql_len);
 
-	char* sql = (char *) calloc(sql_len, sizeof(char));
+	char *sql = (char *) calloc(sql_len, sizeof(char));
 	if (sql == NULL) {
 		free(data_id);
 		free(cols->keys);
@@ -296,7 +296,7 @@ EXPORT_API char *data_control_provider_create_insert_statement(data_control_h pr
 
 EXPORT_API char *data_control_provider_create_delete_statement(data_control_h provider, const char *where)
 {
-	char *data_id = NULL;
+	char* data_id = NULL;
 
 	if (provider == NULL) {
 		set_last_result(DATA_CONTROL_ERROR_INVALID_PARAMETER);
@@ -333,7 +333,7 @@ EXPORT_API char *data_control_provider_create_delete_statement(data_control_h pr
 EXPORT_API char *data_control_provider_create_update_statement(data_control_h provider, bundle *update_map, const char *where)
 {
 	int row_count = bundle_get_count(update_map);
-	if (provider == NULL || row_count == 0)	{
+	if (provider == NULL || row_count == 0) {
 		set_last_result(DATA_CONTROL_ERROR_INVALID_PARAMETER);
 		return NULL;
 	}
@@ -414,8 +414,7 @@ EXPORT_API char *data_control_provider_create_update_statement(data_control_h pr
 	return sql;
 }
 
-EXPORT_API char *data_control_provider_create_select_statement(data_control_h provider, const char **column_list,
-		int column_count, const char *where, const char *order)
+EXPORT_API char *data_control_provider_create_select_statement(data_control_h provider, const char **column_list, int column_count, const char *where, const char *order)
 {
 	int index = 0;
 	int col_name_length = 0;
@@ -517,7 +516,7 @@ EXPORT_API bool data_control_provider_match_data_id(data_control_h provider, con
 	if (ret != DATA_CONTROL_ERROR_NONE)
 		return false;
 
-	if (strcmp(data, data_id) == 0)	{
+	if (strcmp(data, data_id) == 0) {
 		free(data);
 		return true;
 	} else {
@@ -526,8 +525,7 @@ EXPORT_API bool data_control_provider_match_data_id(data_control_h provider, con
 	}
 }
 
-EXPORT_API int
-data_control_provider_send_map_result(int request_id)
+EXPORT_API int data_control_provider_send_map_result(int request_id)
 {
 	return datacontrol_provider_send_map_result(request_id);
 }
