@@ -88,7 +88,7 @@ static int __provider_new_request_id(void)
 	return id;
 }
 
-static int __send_select_result(int fd, bundle *b, void *data)
+static int __send_select_result(int fd, datacontrol_request_s* request_data, void* data)
 {
 
 	LOGI("__send_select_result");
@@ -106,14 +106,12 @@ static int __send_select_result(int fd, bundle *b, void *data)
 	int i = 0;
 	char *column_name = NULL;
 	int total_len_of_column_names = 0;
-	int count_per_page = 0;
-	int page_number = 1;
 	int offset = 0;
 	sqlite3_int64 offset_idx = 0;
 	sqlite3_int64 row_count = 0;
 	unsigned int nb = 0;
 
-	if (b == NULL || data == NULL) {
+	if (request_data == NULL || data == NULL) {
 		LOGE("The input param is invalid.");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
@@ -188,26 +186,11 @@ static int __send_select_result(int fd, bundle *b, void *data)
 
 	LOGI("Writing a total_len_of_column_names %d", total_len_of_column_names);
 
-
-	const char *page_number_str = bundle_get_val(b, RESULT_PAGE_NUMBER);
-	const char *count_per_page_str = bundle_get_val(b, MAX_COUNT_PER_PAGE);
-
-	LOGI("page_number: %s, per_page: %s", page_number_str, count_per_page_str);
-
 	// 5. type, size and value of each element
-	if (page_number_str != NULL)
-		page_number = atoi(page_number_str);
-	else
-		page_number = 1;
 
-	if (count_per_page_str != NULL)
-		count_per_page = atoi(count_per_page_str);
-	else
-		count_per_page = 20;
+	offset = (request_data->page_number - 1) * request_data->count_per_page;
 
-	offset = (page_number - 1) * count_per_page;
-
-	LOGI("page_number: %d, count_per_page: %d, offset: %d", page_number, count_per_page, offset);
+	LOGI("page_number: %d, count_per_page: %d, offset: %d", request_data->page_number, request_data->count_per_page, offset);
 
 	if (sqlite3_reset(state) != SQLITE_OK) {
 		LOGE("sqlite3_reset() is failed.");
@@ -222,7 +205,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 		offset_idx++;
 		if (offset_idx > offset)
 			++row_count;
-	} while (sqlite3_step(state) == SQLITE_ROW && row_count < count_per_page);
+	} while (sqlite3_step(state) == SQLITE_ROW && row_count < request_data->count_per_page);
 
 	// 6. row count
 	if (_write_socket(fd, &row_count, sizeof(row_count), &nb) != DATACONTROL_ERROR_NONE) {
@@ -314,26 +297,20 @@ static int __send_select_result(int fd, bundle *b, void *data)
 
 		}
 
-	} while (sqlite3_step(state) == SQLITE_ROW && row_count < count_per_page);
+	} while (sqlite3_step(state) == SQLITE_ROW && row_count < request_data->count_per_page);
 
 	return DATACONTROL_ERROR_NONE;
 }
 
-static int __send_get_value_result(int fd, bundle *b, void *data)
+static int __send_get_value_result(int fd, datacontrol_request_s* request_data, void* data)
 {
 
 	int i = 0;
 	char **value_list = (char **)data;
 
-	const char *page_num_str = bundle_get_val(b, RESULT_PAGE_NUMBER);
-	const char *count_per_page_str = bundle_get_val(b, MAX_COUNT_PER_PAGE);
-	const char *value_count_str = bundle_get_val(b, RESULT_VALUE_COUNT);
-
-	LOGI("page num: %s, count_per_page: %s, value_count %s", page_num_str, count_per_page_str, value_count_str);
-
-	int page_number = atoi(page_num_str);
-	int count_per_page = atoi(count_per_page_str);
-	int value_count = atoi(value_count_str);
+	int page_number = request_data->page_number;
+	int count_per_page = request_data->count_per_page;
+	int value_count = request_data->data_count;
 	int current_offset = (page_number - 1) * count_per_page;
 	int remain_count = value_count - current_offset;
 	unsigned int nb;
@@ -368,239 +345,62 @@ static int __send_get_value_result(int fd, bundle *b, void *data)
 	return DATACONTROL_ERROR_NONE;
 }
 
-int __datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type type, void *data)
+int __datacontrol_send_async(int sockfd, datacontrol_request_s *request_data, void *data)
 {
 	LOGI("send async ~~~");
 
-	bundle_raw *kb_data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
-	int datalen = 0;
-	char *buf = NULL;
-	int total_len = 0;
+	void *buf = NULL;
 	unsigned int nb = 0;
 
-	bundle_encode_raw(kb, &kb_data, &datalen);
-	if (kb_data == NULL) {
-		LOGE("bundle encode error");
-		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	if (DATACONTROL_TYPE_SQL_INSERT == request_data->type) {
+		request_data->insert_rowid = *(long long*)data;
+		request_data->total_len += sizeof(request_data->insert_rowid);
 	}
 
-	// encoded bundle + encoded bundle len
-	buf = (char *)calloc(datalen + 4, sizeof(char));
-	memcpy(buf, &datalen, sizeof(datalen));
-	memcpy(buf + sizeof(datalen), kb_data, datalen);
-
-	total_len = sizeof(datalen) + datalen;
-
-	LOGI("write : %d", datalen);
-	if (_write_socket(sockfd, buf, total_len, &nb) != DATACONTROL_ERROR_NONE) {
+	_write_request_data_to_result_buffer(request_data, &buf);
+	if (_write_socket(sockfd, buf, request_data->total_len, &nb) != DATACONTROL_ERROR_NONE) {
 		LOGI("write data fail ");
 		ret = DATACONTROL_ERROR_IO_ERROR;
 		goto out;
 	}
 
-	if (DATACONTROL_TYPE_SQL_SELECT == type)
-		ret = __send_select_result(sockfd, kb, data);
-	else if (DATACONTROL_TYPE_MAP_GET == type)
-		ret = __send_get_value_result(sockfd, kb, data);
+	if (DATACONTROL_TYPE_SQL_SELECT == request_data->type)
+		ret = __send_select_result(sockfd, request_data, data);
+	else if (DATACONTROL_TYPE_MAP_GET == request_data->type)
+		ret = __send_get_value_result(sockfd, request_data, data);
 
 out:
 	if (buf)
 		free(buf);
-	bundle_free_encoded_rawdata(&kb_data);
 
 	return ret;
 }
 
-static bundle *__get_data_sql(int fd)
-{
-	bundle *b = bundle_create();
-	int len = 0;
-
-	int ret = read(fd, &len, sizeof(int));
-	if (ret < sizeof(int)) {
-		LOGE("read error :%d", ret);
-		if (b)
-			bundle_free(b);
-		return NULL;
-	}
-
-	if (len > 0) {
-		char *buf = (char *)calloc(len, sizeof(char));
-		if (buf == NULL) {
-			LOGE("calloc fail");
-			return NULL;
-		}
-		ret = read(fd, buf, len);
-		b = bundle_decode_raw((bundle_raw *)buf, len);
-
-		if (buf)
-			free(buf);
-	} else
-		LOGE("__get_data_sql read count : %d", len);
-
-	return b;
-}
-
-static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data)
-{
-
-	bundle *res = bundle_create();
-
-	// Set the type
-	char type_str[MAX_LEN_DATACONTROL_REQ_TYPE] = {0,};
-
-	if (type == DATACONTROL_TYPE_UNDEFINED || type == DATACONTROL_TYPE_ERROR) {
-		char *request_type = (char *)bundle_get_val(b, OSP_K_DATACONTROL_REQUEST_TYPE);
-		strncpy(type_str, request_type, MAX_LEN_DATACONTROL_REQ_TYPE);
-		LOGI("type is %s", type_str);
-
-	} else
-		snprintf(type_str, MAX_LEN_DATACONTROL_REQ_TYPE, "%d", (int)type);
-
-	bundle_add_str(res, OSP_K_DATACONTROL_REQUEST_TYPE, type_str);
-
-	// Set the provider id
-	char *provider_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_PROVIDER);
-	bundle_add_str(res, OSP_K_DATACONTROL_PROVIDER, provider_id);
-
-	// Set the data id
-	char *data_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_DATA);
-	bundle_add_str(res, OSP_K_DATACONTROL_DATA, data_id);
-
-	// Set the caller request id
-	char *request_id = (char *)bundle_get_val(b, OSP_K_REQUEST_ID);
-	bundle_add_str(res, OSP_K_REQUEST_ID, request_id);
-
-	char *caller_appid = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
-	bundle_add_str(res, AUL_K_CALLER_APPID, caller_appid);
-
-	switch (type) {
-	case DATACONTROL_TYPE_SQL_SELECT:
-	{
-		const char *list[3];
-
-		list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
-		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
-		list[PACKET_INDEX_SELECT_RESULT_FILE] = DATACONTROL_EMPTY;
-
-		const char *page_num = bundle_get_val(b, RESULT_PAGE_NUMBER);
-		const char *count_per_page = bundle_get_val(b, MAX_COUNT_PER_PAGE);
-
-		LOGI("page num: %s, count_per_page: %s", page_num, count_per_page);
-
-		bundle_add_str(res, RESULT_PAGE_NUMBER, page_num);
-		bundle_add_str(res, MAX_COUNT_PER_PAGE, count_per_page);
-
-		bundle_add_str_array(res, OSP_K_ARG, list, 3);
-
-		break;
-	}
-
-	case DATACONTROL_TYPE_SQL_INSERT:
-	{
-		long long row_id = *(long long *)data;
-
-		const char *list[3];
-		list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
-		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
-
-		// Set the row value
-		char row_str[ROW_ID_SIZE] = {0,};
-		snprintf(row_str, ROW_ID_SIZE, "%lld", row_id);
-
-		list[PACKET_INDEX_ROW_ID] = row_str;
-		bundle_add_str_array(res, OSP_K_ARG, list, 3);
-		break;
-	}
-	case DATACONTROL_TYPE_SQL_UPDATE:
-	case DATACONTROL_TYPE_SQL_DELETE:
-	{
-		const char *list[2];
-		list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
-		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
-
-		bundle_add_str_array(res, OSP_K_ARG, list, 2);
-		break;
-	}
-	case DATACONTROL_TYPE_MAP_GET:
-	{
-		const char *list[4];
-		list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
-		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
-
-		bundle_add_str_array(res, OSP_K_ARG, list, 2);
-		const char *page_num = bundle_get_val(b, RESULT_PAGE_NUMBER);
-		const char *count_per_page = bundle_get_val(b, MAX_COUNT_PER_PAGE);
-		const char *value_count = bundle_get_val(b, RESULT_VALUE_COUNT);
-
-		bundle_add_str(res, RESULT_PAGE_NUMBER, page_num);
-		bundle_add_str(res, MAX_COUNT_PER_PAGE, count_per_page);
-		bundle_add_str(res, RESULT_VALUE_COUNT, value_count);
-
-		break;
-	}
-	case DATACONTROL_TYPE_UNDEFINED:	// DATACONTROL_TYPE_MAP_SET || ADD || REMOVE
-	{
-		const char *list[2];
-		list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
-		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
-
-		bundle_add_str_array(res, OSP_K_ARG, list, 2);
-		break;
-	}
-	default:  // Error
-	{
-		const char *list[2];
-		list[PACKET_INDEX_REQUEST_RESULT] = "0";		// request result
-		list[PACKET_INDEX_ERROR_MSG] = (char *)data;  // error string
-
-		bundle_add_str_array(res, OSP_K_ARG, list, 2);
-		break;
-	}
-	}
-
-	return res;
-}
-
-static int __send_result(bundle *b, datacontrol_request_type type, void *data)
+static int __send_result(datacontrol_request_s *request_data, datacontrol_request_type type, void *data)
 {
 
 	datacontrol_socket_info *socket_info;
-	char *caller_app_id = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
-
-	LOGI("__datacontrol_send_async caller_app_id : %s ", caller_app_id);
-
-	socket_info = g_hash_table_lookup(__socket_pair_hash, caller_app_id);
-	int ret = __datacontrol_send_async(socket_info->socket_fd, b, type, data);
-
-	LOGI("__datacontrol_send_async result : %d ", ret);
-
+	socket_info = g_hash_table_lookup(__socket_pair_hash, request_data->app_id);
+	int ret = __datacontrol_send_async(socket_info->socket_fd, request_data, data);
 	if (ret != DATACONTROL_ERROR_NONE)
-		g_hash_table_remove(__socket_pair_hash, caller_app_id);
-
-	bundle_free(b);
-	return ret;
+		g_hash_table_remove(__socket_pair_hash, request_data->app_id);
+	return DATACONTROL_ERROR_NONE;
 }
 
 
-int __provider_process(bundle *b, int fd)
+int __provider_process(datacontrol_request_s *request_data, int fd)
 {
-	const char *request_type = bundle_get_val(b, OSP_K_DATACONTROL_REQUEST_TYPE);
-	if (request_type == NULL) {
-		LOGE("Invalid data control request");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
 	// Get the request type
-	datacontrol_request_type type = atoi(request_type);
-	if (type >= DATACONTROL_TYPE_SQL_SELECT && type <= DATACONTROL_TYPE_SQL_DELETE)	{
+	if (request_data->type >= DATACONTROL_TYPE_SQL_SELECT &&
+			request_data->type <= DATACONTROL_TYPE_SQL_DELETE) {
 		if (provider_sql_cb == NULL) {
 			LOGE("SQL callback is not registered.");
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
 		}
 
-	} else if (type >= DATACONTROL_TYPE_MAP_GET && type <= DATACONTROL_TYPE_MAP_REMOVE) {
+	} else if (request_data->type >= DATACONTROL_TYPE_MAP_GET &&
+			request_data->type <= DATACONTROL_TYPE_MAP_REMOVE) {
 		if (provider_map_cb == NULL) {
 			LOGE("Map callback is not registered.");
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -611,9 +411,6 @@ int __provider_process(bundle *b, int fd)
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	int len = 0;
-	const char **arg_list = bundle_get_str_array(b, OSP_K_ARG, &len);
-
 	datacontrol_h provider = malloc(sizeof(struct datacontrol_s));
 	if (provider == NULL) {
 		LOGE("Out of memory. fail to alloc provider.");
@@ -621,15 +418,13 @@ int __provider_process(bundle *b, int fd)
 	}
 
 	// Set the provider ID
-	provider->provider_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_PROVIDER);
+	provider->provider_id = request_data->provider_id;
 
 	// Set the data ID
-	provider->data_id = (char *)arg_list[PACKET_INDEX_DATAID];
+	provider->data_id = request_data->data_id;
 
 	// Set the request ID
 	int provider_req_id = __provider_new_request_id();
-
-	LOGI("Provider ID: %s, data ID: %s, request type: %s", provider->provider_id, provider->data_id, request_type);
 
 	// Add the data to the table
 	int *key = malloc(sizeof(int));
@@ -639,122 +434,94 @@ int __provider_process(bundle *b, int fd)
 	}
 	*key = provider_req_id;
 
-	bundle *value = bundle_dup(b);
-	if (value == NULL) {
-		LOGE("Fail to dup value");
-		return DATACONTROL_ERROR_IO_ERROR;
-	}
-	g_hash_table_insert(__request_table, key, value);
+	g_hash_table_insert(__request_table, key, request_data);
 
-	switch (type) {
+	switch (request_data->type) {
 	case DATACONTROL_TYPE_SQL_SELECT:
 	{
-		int i = 1;
-		int current = 0;
-		int column_count = atoi(arg_list[i++]); // Column count
-
-		LOGI("SELECT column count: %d", column_count);
-		const char **column_list = (const char **)malloc(column_count * (sizeof(char *)));
-		if (column_list == NULL) {
-			LOGE("Out of memory. Fail to malloc column_list.");
-			return DATACONTROL_ERROR_IO_ERROR;
-		}
-
-		while (current < column_count) {
-			column_list[current++] = arg_list[i++];  // Column data
-			LOGI("Column %d: %s", current, column_list[current-1]);
-		}
-
-		const char *where = arg_list[i++];  // where
-		const char *order = arg_list[i++];  // order
-		LOGI("where: %s, order: %s", where, order);
-
-		if (strncmp(where, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0)
+		const char *where = request_data->where;
+		const char *order = request_data->order;
+		if (strncmp(where, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0) {
 			where = NULL;
+		}
 
-		if (strncmp(order, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0)
+		if (strncmp(order, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0) {
 			order = NULL;
+		}
 
-		const char *page_number = arg_list[i++];
-		const char *per_page =  arg_list[i];
-
-		LOGI("page_number: %s, per_page: %s", page_number, per_page);
-		bundle_add_str(value, RESULT_PAGE_NUMBER, page_number);
-		bundle_add_str(value, MAX_COUNT_PER_PAGE, per_page);
-		provider_sql_cb->select(provider_req_id, provider, column_list, column_count, where, order, provider_sql_user_data);
-		free(column_list);
+		LOGI("where %s, order %s, page_number %d, per_page %d", request_data->where, request_data->order,
+				request_data->page_number, request_data->count_per_page);
+		provider_sql_cb->select(provider_req_id, provider, request_data->data_list,
+				request_data->data_count, where, order, provider_sql_user_data);
 		break;
 	}
+
 	case DATACONTROL_TYPE_SQL_INSERT:
 	case DATACONTROL_TYPE_SQL_UPDATE:
 	{
-		LOGI("INSERT / UPDATE handler");
-		bundle *sql = __get_data_sql(fd);
-		if (sql == NULL)
+		bundle *sql = bundle_decode_raw((bundle_raw *)request_data->extra_data, request_data->data_count);
+		if (sql == NULL) {
+		LOGE("bundle_decode_raw error : %d ", get_last_result());
 			return DATACONTROL_ERROR_IO_ERROR;
-		if (type == DATACONTROL_TYPE_SQL_INSERT)
-			provider_sql_cb->insert(provider_req_id, provider, sql, provider_sql_user_data);
-		else {
-			const char *where = arg_list[PACKET_INDEX_UPDATEWHERE];
-			LOGI("UPDATE from where: %s", where);
-			if (strncmp(where, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0)
+		}
+
+
+		if (request_data->type == DATACONTROL_TYPE_SQL_INSERT) {
+			provider_sql_cb->insert(provider_req_id, provider, sql,
+					provider_sql_user_data);
+		} else {
+			LOGI("UPDATE from where: %s", request_data->where);
+			const char *where = request_data->where;
+			if (strncmp(where, DATACONTROL_EMPTY,
+						strlen(DATACONTROL_EMPTY)) == 0) {
 				where = NULL;
-			provider_sql_cb->update(provider_req_id, provider, sql, where, provider_sql_user_data);
+			}
+			provider_sql_cb->update(provider_req_id, provider, sql,
+					where, provider_sql_user_data);
 		}
 		bundle_free(sql);
 		break;
 	}
 	case DATACONTROL_TYPE_SQL_DELETE:
 	{
-		const char *where = arg_list[PACKET_INDEX_DELETEWHERE];
+		const char *where = request_data->where;
 		LOGI("DELETE from where: %s", where);
-		if (strncmp(where, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0)
+		if (strncmp(where, DATACONTROL_EMPTY,
+					strlen(DATACONTROL_EMPTY)) == 0)
 			where = NULL;
+
 		provider_sql_cb->delete(provider_req_id, provider, where, provider_sql_user_data);
-		break;
-	}
-	case DATACONTROL_TYPE_MAP_GET:
-	{
-		const char *map_key = arg_list[PACKET_INDEX_MAP_KEY];
-		const char *page_number = arg_list[PACKET_INDEX_MAP_PAGE_NO];
-		const char *count_per_page =  arg_list[PACKET_INDEX_MAP_COUNT_PER_PAGE];
-		bundle_add_str(value, RESULT_PAGE_NUMBER, page_number);
-		bundle_add_str(value, MAX_COUNT_PER_PAGE, count_per_page);
-		LOGI("Gets the value list related with the key(%s) from Map datacontrol. ", map_key);
-		provider_map_cb->get(provider_req_id, provider, map_key, provider_map_user_data);
-		break;
-	}
-	case DATACONTROL_TYPE_MAP_SET:
-	{
-		const char *map_key = arg_list[PACKET_INDEX_MAP_KEY];
-		const char *old_value = arg_list[PACKET_INDEX_MAP_VALUE_1ST];
-		const char *new_value = arg_list[PACKET_INDEX_MAP_VALUE_2ND];
-		LOGI("Sets the old value(%s) of the key(%s) to the new value(%s) in Map datacontrol.", old_value, map_key, new_value);
-		provider_map_cb->set(provider_req_id, provider, map_key, old_value, new_value, provider_map_user_data);
 		break;
 	}
 	case DATACONTROL_TYPE_MAP_ADD:
 	{
-		const char *map_key = arg_list[PACKET_INDEX_MAP_KEY];
-		const char *map_value = arg_list[PACKET_INDEX_MAP_VALUE_1ST];
-		LOGI("Adds the %s-%s in Map datacontrol.", map_key, map_value);
-		provider_map_cb->add(provider_req_id, provider, map_key, map_value, provider_map_user_data);
+		LOGI("Adds the %s-%s in Map datacontrol.", request_data->key, request_data->value);
+		provider_map_cb->add(provider_req_id, provider, request_data->key, request_data->value, provider_map_user_data);
+		break;
+	}
+	case DATACONTROL_TYPE_MAP_GET:
+	{
+		LOGI("Gets the value list related with the key(%s) from Map datacontrol. ", request_data->key);
+		provider_map_cb->get(provider_req_id, provider, request_data->key, provider_map_user_data);
+		break;
+	}
+	case DATACONTROL_TYPE_MAP_SET:
+	{
+		LOGI("Sets the old value(%s) of the key(%s) to the new value(%s) in Map datacontrol.", request_data->old_value, request_data->key, request_data->new_value);
+		provider_map_cb->set(provider_req_id, provider, request_data->key, request_data->old_value, request_data->new_value, provider_map_user_data);
 		break;
 	}
 	case DATACONTROL_TYPE_MAP_REMOVE:
 	{
-		const char *map_key = arg_list[PACKET_INDEX_MAP_KEY];
-		const char *map_value = arg_list[PACKET_INDEX_MAP_VALUE_1ST];
-		LOGI("Removes the %s-%s in Map datacontrol.", map_key, map_value);
-		provider_map_cb->remove(provider_req_id, provider, map_key, map_value, provider_map_user_data);
+		LOGI("Removes the %s-%s in Map datacontrol.", request_data->key, request_data->value);
+		provider_map_cb->remove(provider_req_id, provider, request_data->key, request_data->value, provider_map_user_data);
 		break;
 	}
 	default:
-		break;
+	break;
+
 	}
-
 	free(provider);
-
 	return DATACONTROL_ERROR_NONE;
 }
 
@@ -793,15 +560,12 @@ gboolean __provider_recv_message(GIOChannel *channel,
 
 		LOGI("__provider_recv_message: ...from %d: %d bytes\n", fd, data_len);
 		if (data_len > 0) {
-			bundle *kb = NULL;
-
 			buf = (char *) calloc(data_len + 1, sizeof(char));
 			if (buf == NULL) {
 				LOGE("calloc failed");
 				goto error;
 			}
-
-			if (_read_socket(fd, buf, data_len, &nb) != DATACONTROL_ERROR_NONE) {
+			if (_read_socket(fd, buf, data_len - sizeof(int), &nb) != DATACONTROL_ERROR_NONE) {
 				LOGI("read socket fail : data_len\n");
 				goto error;
 			}
@@ -812,13 +576,11 @@ gboolean __provider_recv_message(GIOChannel *channel,
 				goto error;
 			}
 
-			kb = bundle_decode_raw((bundle_raw *)buf, data_len);
-			free(buf);
-			if (__provider_process(kb, fd) != DATACONTROL_ERROR_NONE) {
-				bundle_free(kb);
+			datacontrol_request_s *request_data = _read_request_data_from_buf(buf);
+			if (buf)
+				free(buf);
+			if(__provider_process(request_data, fd) != DATACONTROL_ERROR_NONE)
 				goto error;
-			}
-			bundle_free(kb);
 		}
 	}
 	return retval;
@@ -924,21 +686,19 @@ int datacontrol_provider_get_client_appid(int request_id, char **appid)
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
-	if (!b) {
+	datacontrol_request_s *request_data= g_hash_table_lookup(__request_table, &request_id);
+	if (!request_data) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	const char *caller = bundle_get_val(b, AUL_K_CALLER_APPID);
-	if (!caller) {
+	if (!request_data->app_id) {
 		LOGE("No appid for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	LOGI("Request ID: %d, caller appid: %s", request_id, caller);
-
-	*appid = strdup(caller);
+	LOGI("Request ID: %d, caller appid: %s", request_id, request_data->app_id);
+	*appid = strdup(request_data->app_id);
 
 	return DATACONTROL_ERROR_NONE;
 }
@@ -950,14 +710,13 @@ int datacontrol_provider_send_select_result(int request_id, void *db_handle)
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
-	if (!b) {
+	datacontrol_request_s *request_data = g_hash_table_lookup(__request_table, &request_id);
+	if (!request_data) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_SELECT, db_handle);
-	return __send_result(res, DATACONTROL_TYPE_SQL_SELECT, db_handle);
+	return __send_result(request_data, DATACONTROL_TYPE_SQL_SELECT, db_handle);
 }
 
 int datacontrol_provider_send_insert_result(int request_id, long long row_id)
@@ -967,15 +726,13 @@ int datacontrol_provider_send_insert_result(int request_id, long long row_id)
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
-	if (!b) {
+	datacontrol_request_s *request_data = g_hash_table_lookup(__request_table, &request_id);
+	if (!request_data) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_INSERT, (void *)&row_id);
-
-	return __send_result(res, DATACONTROL_TYPE_SQL_INSERT, NULL);
+	return __send_result(request_data, DATACONTROL_TYPE_SQL_INSERT, (void *)&row_id);
 }
 
 int datacontrol_provider_send_update_result(int request_id)
@@ -985,15 +742,14 @@ int datacontrol_provider_send_update_result(int request_id)
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
-	if (!b) {
+	datacontrol_request_s *request_data = g_hash_table_lookup(__request_table, &request_id);
+	if (!request_data) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_UPDATE, NULL);
+	return __send_result(request_data, DATACONTROL_TYPE_SQL_UPDATE, NULL);
 
-	return __send_result(res, DATACONTROL_TYPE_SQL_UPDATE, NULL);
 }
 
 int datacontrol_provider_send_delete_result(int request_id)
@@ -1003,15 +759,13 @@ int datacontrol_provider_send_delete_result(int request_id)
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
-	if (!b) {
+	datacontrol_request_s *request_data = g_hash_table_lookup(__request_table, &request_id);
+	if (!request_data) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_DELETE, NULL);
-
-	return __send_result(res, DATACONTROL_TYPE_SQL_DELETE, NULL);
+	return __send_result(request_data, DATACONTROL_TYPE_SQL_DELETE, NULL);
 }
 
 int datacontrol_provider_send_error(int request_id, const char *error)
@@ -1021,15 +775,13 @@ int datacontrol_provider_send_error(int request_id, const char *error)
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
-	if (!b) {
+	datacontrol_request_s *request_data = g_hash_table_lookup(__request_table, &request_id);
+	if (!request_data) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_ERROR, (void *)error);
-
-	return __send_result(res, DATACONTROL_TYPE_ERROR, NULL);
+	return __send_result(request_data, DATACONTROL_TYPE_ERROR, NULL);
 }
 
 int datacontrol_provider_send_map_result(int request_id)
@@ -1039,15 +791,13 @@ int datacontrol_provider_send_map_result(int request_id)
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
-	if (!b) {
+	datacontrol_request_s *request_data = g_hash_table_lookup(__request_table, &request_id);
+	if (!request_data) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_UNDEFINED, NULL);
-
-	return __send_result(res, DATACONTROL_TYPE_UNDEFINED, NULL);
+	return __send_result(request_data, DATACONTROL_TYPE_UNDEFINED, NULL);
 }
 
 int datacontrol_provider_send_map_get_value_result(int request_id, char **value_list, int value_count)
@@ -1063,11 +813,11 @@ int datacontrol_provider_send_map_get_value_result(int request_id, char **value_
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	char value_count_str[32] = {0,};
-	snprintf(value_count_str, 32, "%d", value_count);
-	bundle_add_str(b, RESULT_VALUE_COUNT, value_count_str);
-
-	bundle *res = __set_result(b, DATACONTROL_TYPE_MAP_GET, value_list);
-
-	return __send_result(res, DATACONTROL_TYPE_MAP_GET, value_list);
+	datacontrol_request_s *request_data = g_hash_table_lookup(__request_table, &request_id);
+	if (!request_data) {
+		SECURE_LOGE("No data for the request id: %d", request_id);
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+	request_data->data_count = value_count;
+	return __send_result(request_data, DATACONTROL_TYPE_MAP_GET, value_list);
 }
