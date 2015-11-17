@@ -30,6 +30,7 @@
 
 #define MAX_LEN_DATACONTROL_REQ_TYPE  8
 #define MAX_LEN_DATACONTROL_COLUMN_COUNT  8
+#define MAX_PACKAGE_STR_SIZE		512
 
 #define OSP_K_LAUNCH_TYPE   "__OSP_LAUNCH_TYPE__"
 #define OSP_K_ARG           "__OSP_ARGS__"
@@ -88,6 +89,34 @@ typedef struct datacontrol_consumer_request {
 	datacontrol_request_type type;
 } datacontrol_consumer_request_info;
 
+typedef struct
+{
+	int total_len;
+	datacontrol_request_type type;
+	char *provider_id;
+	char *app_id;
+	char *data_id;
+	int page_number;
+	int count_per_page;
+	int data_count;
+	const char **data_list;
+	const char *where;
+	const char *order;
+	bundle_raw *extra_data;
+	int request_id;
+	long long insert_rowid;
+	const char *key;
+	const char *value;
+	const char *old_value;
+	const char *new_value;
+} datacontrol_request_s;
+
+datacontrol_request_s * _read_request_data_from_result_buf(void *buf);
+int _write_request_data_to_result_buffer(datacontrol_request_s *request_data, void **buf);
+
+datacontrol_request_s * _read_request_data_from_buf(void *buf);
+int _write_request_data_to_buffer(datacontrol_request_s *request_data, void **buf);
+
 int _consumer_request_compare_cb(gconstpointer a, gconstpointer b);
 
 int _datacontrol_sql_set_cursor(const char *path);
@@ -106,7 +135,10 @@ int _get_gdbus_shared_connection(GDBusConnection **connection, char *provider_id
 void _socket_info_free (gpointer socket);
 datacontrol_socket_info * _get_socket_info(const char *caller_id, const char *callee_id, const char *type, GIOFunc cb, void *data);
 int _request_appsvc_run(const char *caller_id, const char *callee_id);
-
+int _copy_string_from_request_data(void **to_buf, void *from_buf, int *buf_offset);
+int _copy_from_request_data(void **to_buf, void *from_buf, int *buf_offset, int size);
+datacontrol_request_s *_create_datacontrol_request_s(datacontrol_h provider, datacontrol_request_type type, int request_id, char *app_id);
+void _free_datacontrol_request(datacontrol_request_s *datacontrol_request);
 
 
 #endif /* _APPFW_DATA_CONTROL_INTERNAL_H_ */

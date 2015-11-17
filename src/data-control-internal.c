@@ -30,6 +30,209 @@
 
 #define BUFSIZE 512
 
+struct datacontrol_s {
+	char *provider_id;
+	char *data_id;
+};
+
+
+int _copy_string_from_buf(void **to_buf, void *from_buf, int *buf_offset)
+{
+
+	int copy_len = 0;
+	memcpy(&copy_len, from_buf + *buf_offset, sizeof(int));
+	*buf_offset += sizeof(int);
+
+	*to_buf = (void *)calloc(copy_len, sizeof(void));
+	memcpy(*to_buf, from_buf + *buf_offset, copy_len);
+	*buf_offset += copy_len;
+
+	return DATACONTROL_ERROR_NONE;
+}
+
+int _copy_from_buf(void *to_buf, void *from_buf, int *buf_offset, int size)
+{
+
+	memcpy(to_buf, from_buf + *buf_offset, size);
+	*buf_offset += size;
+
+	return DATACONTROL_ERROR_NONE;
+}
+
+datacontrol_request_s *_read_request_data_from_buf(void *buf)
+{
+
+	int buf_offset = 0;
+	int i = 0;
+
+	datacontrol_request_s *request_data = (datacontrol_request_s *)calloc(sizeof(datacontrol_request_s), 1);
+	if (request_data == NULL) {
+		LOGE("fail to calloc request_data");
+		return NULL;
+	}
+
+	_copy_from_buf(&request_data->type, buf, &buf_offset, sizeof(request_data->type));
+	_copy_string_from_buf((void **)&request_data->provider_id, buf, &buf_offset);
+	_copy_string_from_buf((void **)&request_data->data_id, buf, &buf_offset);
+	_copy_string_from_buf((void **)&request_data->app_id, buf, &buf_offset);
+	_copy_from_buf(&request_data->request_id, buf, &buf_offset, sizeof(request_data->request_id));
+
+	LOGI("type %d, provider_id %s, data_id %s, app_id %s, request_id %d", request_data->type, request_data->provider_id
+			,request_data->data_id, request_data->app_id, request_data->request_id);
+
+	request_data->total_len = buf_offset + sizeof(request_data->total_len);
+
+
+	if (request_data->type == DATACONTROL_TYPE_SQL_SELECT) {
+		_copy_from_buf(&request_data->page_number, buf, &buf_offset,
+				sizeof(request_data->page_number));
+		_copy_from_buf(&request_data->count_per_page, buf, &buf_offset,
+				sizeof(request_data->count_per_page));
+		_copy_from_buf(&request_data->data_count, buf, &buf_offset,
+				sizeof(request_data->data_count));
+		if (request_data->data_count > 0)
+			request_data->data_list = (const char **)calloc(request_data->data_count, sizeof(char *));
+
+		for (i = 0; i < request_data->data_count; i ++) {
+			_copy_string_from_buf((void **)&request_data->data_list[i], buf, &buf_offset);
+		}
+		_copy_string_from_buf((void **)&request_data->where, buf, &buf_offset);
+		_copy_string_from_buf((void **)&request_data->order, buf, &buf_offset);
+		LOGI("page_number %d, count_per_page %d, data_count %d, where %s, order : %s",
+				request_data->page_number, request_data->count_per_page,
+				request_data->data_count, request_data->where, request_data->order);
+
+	} else if(request_data->type == DATACONTROL_TYPE_SQL_INSERT) {
+		_copy_from_buf(&request_data->data_count, buf, &buf_offset,
+				sizeof(request_data->data_count));
+		buf_offset -= sizeof(int);
+		LOGI("sql insert extra_data_len : %d", request_data->data_count);
+		_copy_string_from_buf((void **)&request_data->extra_data, buf, &buf_offset);
+	} else if (request_data->type == DATACONTROL_TYPE_SQL_UPDATE) {
+		_copy_string_from_buf((void **)&request_data->where, buf, &buf_offset);
+		_copy_from_buf(&request_data->data_count, buf, &buf_offset,
+				sizeof(request_data->data_count));
+		buf_offset -= sizeof(int);
+		_copy_string_from_buf((void **)&request_data->extra_data, buf, &buf_offset);
+		LOGI("sql  extra_data_len : %d", request_data->data_count);
+
+	} else if (request_data->type == DATACONTROL_TYPE_SQL_DELETE) {
+		_copy_string_from_buf((void **)&request_data->where, buf, &buf_offset);
+	}  else if(request_data->type == DATACONTROL_TYPE_MAP_ADD) {
+		_copy_string_from_buf((void **)&request_data->key, buf, &buf_offset);
+		_copy_string_from_buf((void **)&request_data->value, buf, &buf_offset);
+		LOGI("key %s, value %s",request_data->key, request_data->value);
+
+	} else if(request_data->type == DATACONTROL_TYPE_MAP_SET) {
+		_copy_string_from_buf((void **)&request_data->key, buf, &buf_offset);
+		_copy_string_from_buf((void **)&request_data->old_value, buf, &buf_offset);
+		_copy_string_from_buf((void **)&request_data->new_value, buf, &buf_offset);
+		LOGI("key %s, old_value %s, new_value %s",request_data->key, request_data->old_value,
+				request_data->new_value);
+
+	} else if(request_data->type == DATACONTROL_TYPE_MAP_REMOVE) {
+		_copy_string_from_buf((void **)&request_data->key, buf, &buf_offset);
+		_copy_string_from_buf((void **)&request_data->value, buf, &buf_offset);
+		LOGI("key %s, value %s",request_data->key, request_data->value);
+
+	} else if(request_data->type == DATACONTROL_TYPE_MAP_GET) {
+		_copy_string_from_buf((void **)&request_data->key, buf, &buf_offset);
+		_copy_from_buf(&request_data->page_number, buf, &buf_offset,
+				sizeof(request_data->page_number));
+		_copy_from_buf(&request_data->count_per_page, buf, &buf_offset,
+				sizeof(request_data->count_per_page));
+		LOGI("key %s, page_number %d, count_per_page %d",request_data->key, request_data->page_number, request_data->count_per_page);
+	}
+
+	return request_data;
+
+}
+
+int _write_request_data_to_result_buffer(datacontrol_request_s *request_data, void **buf)
+{
+
+	int buf_offset = 0;
+
+	*buf = (void *)calloc(request_data->total_len, sizeof(void));
+	if (*buf == NULL) {
+		LOGE("fail to calloc buf");
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+
+	_copy_from_request_data(buf, &request_data->total_len, &buf_offset, sizeof(request_data->total_len));
+	_copy_from_request_data(buf, &request_data->type, &buf_offset, sizeof(request_data->type));
+	_copy_string_from_request_data(buf, request_data->provider_id, &buf_offset);
+	_copy_string_from_request_data(buf, request_data->data_id, &buf_offset);
+	_copy_string_from_request_data(buf, request_data->app_id, &buf_offset);
+	_copy_from_request_data(buf, &request_data->request_id, &buf_offset, sizeof(request_data->request_id));
+
+	if (request_data->type == DATACONTROL_TYPE_SQL_INSERT) {
+		_copy_from_request_data(buf, &request_data->insert_rowid, &buf_offset,
+				sizeof(request_data->insert_rowid));
+		LOGI("insert_rowid : %d", request_data->insert_rowid);
+	}
+
+	LOGI("type %d, provider_id %s, data_id %s, app_id %s, request_id %d", request_data->type, request_data->provider_id
+			,request_data->data_id, request_data->app_id, request_data->request_id);
+
+
+	return DATACONTROL_ERROR_NONE;
+}
+
+datacontrol_request_s *_read_request_data_from_result_buf(void *buf)
+{
+
+	int buf_offset = 0;
+
+	datacontrol_request_s *request_data = (datacontrol_request_s *)calloc(sizeof(datacontrol_request_s), 1);
+	if (request_data == NULL) {
+		LOGE("fail to calloc request_data");
+		return NULL;
+	}
+
+	_copy_from_buf(&request_data->type, buf, &buf_offset, sizeof(request_data->type));
+	_copy_string_from_buf((void **)&request_data->provider_id, buf, &buf_offset);
+	_copy_string_from_buf((void **)&request_data->data_id, buf, &buf_offset);
+	_copy_string_from_buf((void **)&request_data->app_id, buf, &buf_offset);
+	_copy_from_buf(&request_data->request_id, buf, &buf_offset,
+			sizeof(request_data->request_id));
+
+	if (request_data->type == DATACONTROL_TYPE_SQL_INSERT) {
+		_copy_from_buf(&request_data->insert_rowid, buf, &buf_offset,
+				sizeof(request_data->insert_rowid));
+		LOGI("insert_rowid : %d", request_data->insert_rowid);
+	}
+
+	LOGI("type %d, provider_id %s, data_id %s, app_id %s, request_id %d", request_data->type, request_data->provider_id
+			,request_data->data_id, request_data->app_id, request_data->request_id);
+
+
+	return request_data;
+
+}
+
+int _copy_string_from_request_data(void **to_buf, void *from_buf, int *buf_offset)
+{
+
+	int data_size = strlen(from_buf) + 1;
+	memcpy(*to_buf + *buf_offset, &data_size, sizeof(int));
+	*buf_offset += sizeof(int);
+
+	memcpy(*to_buf + *buf_offset, from_buf, data_size);
+	*buf_offset += data_size;
+
+	return DATACONTROL_ERROR_NONE;
+}
+
+int _copy_from_request_data(void **to_buf, void *from_buf, int *buf_offset, int size)
+{
+
+	memcpy(*to_buf + *buf_offset, from_buf, size);
+	*buf_offset += size;
+
+	return DATACONTROL_ERROR_NONE;
+}
+
 int _consumer_request_compare_cb(gconstpointer a, gconstpointer b)
 {
 	datacontrol_consumer_request_info *key1 = (datacontrol_consumer_request_info *)a;
@@ -270,4 +473,96 @@ int _request_appsvc_run(const char *caller_id, const char *callee_id)
 	return DATACONTROL_ERROR_NONE;
 
 }
+
+
+datacontrol_request_s *_create_datacontrol_request_s(datacontrol_h provider, datacontrol_request_type type, int request_id, char *app_id)
+{
+
+	datacontrol_request_s *datacontrol_request = (datacontrol_request_s *)calloc(1, sizeof(datacontrol_request_s));
+	if (!datacontrol_request) {
+		LOGE("unable to create sql request: %d", errno);
+		return NULL;
+	}
+	datacontrol_request->total_len = sizeof(int);
+
+	datacontrol_request->provider_id = strdup(provider->provider_id);
+	datacontrol_request->total_len += sizeof(int);
+	datacontrol_request->total_len += strlen(provider->provider_id) + 1;
+
+	datacontrol_request->data_id = strdup(provider->data_id);
+	datacontrol_request->total_len += sizeof(int);
+	datacontrol_request->total_len += strlen(provider->data_id) + 1;
+
+	datacontrol_request->app_id = strdup(app_id);
+	datacontrol_request->total_len += sizeof(int);
+	datacontrol_request->total_len += strlen(app_id) + 1;
+
+	datacontrol_request->request_id = request_id;
+	datacontrol_request->total_len += sizeof(int);
+
+	datacontrol_request->type = type;
+	datacontrol_request->total_len += sizeof(int);
+
+	datacontrol_request->data_list = NULL;
+	datacontrol_request->where = NULL;
+	datacontrol_request->order = NULL;
+	datacontrol_request->key = NULL;
+	datacontrol_request->value = NULL;
+	datacontrol_request->old_value = NULL;
+	datacontrol_request->new_value = NULL;
+	datacontrol_request->extra_data = NULL;
+
+	return datacontrol_request;
+}
+
+void _free_datacontrol_request(datacontrol_request_s *request_data)
+{
+
+	if (request_data->provider_id)
+		free(request_data->provider_id);
+	if (request_data->app_id)
+		free(request_data->app_id);
+	if (request_data->data_id)
+		free(request_data->data_id);
+
+	if (request_data->data_list) {
+		int i = 0;
+		for (i = 0; i < request_data->data_count; i ++) {
+			if (request_data->data_list[i]) {
+				free((void *)request_data->data_list[i]);
+				request_data->data_list[i] = NULL;
+			}
+		}
+		free(request_data->data_list);
+	}
+
+	if (request_data->where)
+		free((void *)request_data->where);
+
+	if (request_data->order)
+		free((void *)request_data->order);
+
+	if (request_data->key)
+		free((void *)request_data->key);
+
+	if (request_data->value)
+		free((void *)request_data->value);
+
+	if (request_data->old_value)
+		free((void *)request_data->old_value);
+
+	if (request_data->new_value)
+		free((void *)request_data->new_value);
+
+	if (request_data->extra_data != NULL)
+		bundle_free_encoded_rawdata(&request_data->extra_data);
+
+	if (request_data)
+		free((void *)request_data);
+
+	LOGI("free request_data done");
+
+}
+
+
 
