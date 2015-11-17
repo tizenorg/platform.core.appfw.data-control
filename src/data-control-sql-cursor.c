@@ -34,9 +34,9 @@ int datacontrol_sql_step_next(resultset_cursor *cursor)
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
-	if (cursor->resultset_current_offset == 0)
+	if (cursor->resultset_current_offset == 0) {
 		cursor->resultset_current_offset = cursor->resultset_content_offset;
-	else {
+	} else {
 		if (!(cursor->resultset_current_row_count < (cursor->resultset_row_count - 1))) {
 			LOGE("Reached to the end of the result set");
 			return DATACONTROL_ERROR_IO_ERROR;
@@ -53,23 +53,23 @@ int datacontrol_sql_step_last(resultset_cursor *cursor)
 {
 	int ret = 0;
 	if (cursor->resultset_current_row_count == (cursor->resultset_row_count - 1))
-		return DATACONTROL_ERROR_NONE; // Already @ last row
+		return DATACONTROL_ERROR_NONE; /* Already @ last row */
 
 	if (!cursor->row_offset_list) {
-		ret = datacontrol_sql_step_next(cursor); // make a first move
+		ret = datacontrol_sql_step_next(cursor); /* make a first move */
 		if (ret != DATACONTROL_ERROR_NONE)
 			return ret;
 	}
 
-	// check if the rowOffsetList contains last row offset
+	/* check if the rowOffsetList contains last row offset */
 	if (cursor->row_offset_list && cursor->row_offset_list[cursor->resultset_row_count - 1] != 0) {
 		cursor->resultset_current_offset = cursor->row_offset_list[cursor->resultset_row_count - 1];
 		cursor->resultset_current_row_count = cursor->resultset_row_count - 1;
 	} else {
 		int i = 0;
-		// Move till last row offset.
+		/* Move till last row offset. */
 		for (i = (cursor->resultset_current_row_count + 1); i < cursor->resultset_row_count; i++) {
-			ret = datacontrol_sql_step_next(cursor); // move till last row data offset
+			ret = datacontrol_sql_step_next(cursor); /* move till last row data offset */
 			if (ret != DATACONTROL_ERROR_NONE)
 				return ret;
 		}
@@ -87,7 +87,7 @@ int datacontrol_sql_step_first(resultset_cursor *cursor)
 		return DATACONTROL_ERROR_NONE;
 	}
 
-	// MoveFirst is called for the first time before MoveNext() or MoveLast()
+	/* MoveFirst is called for the first time before MoveNext() or MoveLast() */
 	cursor->resultset_current_offset = 0;
 	return datacontrol_sql_step_next(cursor);
 }
@@ -137,7 +137,7 @@ int datacontrol_sql_get_column_name(resultset_cursor *cursor, int column_index, 
 		}
 	}
 
-	memset(name, 0, strlen(col_name)); // To avoid copying newline
+	memset(name, 0, strlen(col_name)); /* To avoid copying newline */
 	memcpy(name, col_name, strlen(col_name) - 1);
 
 	LOGI("The column name is %s", name);
@@ -163,7 +163,7 @@ int datacontrol_sql_get_column_item_size(resultset_cursor *cursor, int column_in
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
-	// move to column index
+	/* move to column index */
 	for (i = 0; i < column_index; i++) {
 		ret = read(fd, &type, sizeof(int));
 		if (ret == 0) {
@@ -216,7 +216,7 @@ int datacontrol_sql_get_column_item_type(resultset_cursor *cursor, int column_in
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
-	// move to column index
+	/* move to column index */
 	for (i = 0; i < column_index; i++) {
 		ret = read(fd, &type, sizeof(int));
 		if (ret == 0) {
@@ -288,7 +288,7 @@ int datacontrol_sql_get_blob_data(resultset_cursor *cursor, int column_index, vo
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
-	// move to column index
+	/* move to column index */
 	for (i = 0; i < column_index; i++) {
 		ret = read(fd, &type, sizeof(int));
 		if (ret == 0) {
@@ -323,7 +323,7 @@ int datacontrol_sql_get_blob_data(resultset_cursor *cursor, int column_index, vo
 	ret = read(fd, &size, sizeof(int));
 	if (size > data_size) {
 		LOGE("size is more than the size requested");
-		return DATACONTROL_ERROR_MAX_EXCEEDED; //overflow
+		return DATACONTROL_ERROR_MAX_EXCEEDED; /* overflow */
 	}
 
 	if (size > 0) {
@@ -372,7 +372,7 @@ int datacontrol_sql_get_int64_data(resultset_cursor *cursor, int column_index, l
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
-	// move to column index
+	/* move to column index */
 	for (i = 0; i < column_index; i++) {
 		ret = read(fd, &type, sizeof(int));
 		if (ret == 0) {
@@ -434,7 +434,7 @@ int datacontrol_sql_get_double_data(resultset_cursor *cursor, int column_index, 
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
-	// move to column index
+	/* move to column index */
 	for (i = 0; i < column_index; i++) {
 		ret = read(fd, &type, sizeof(int));
 		if (ret == 0) {
@@ -497,7 +497,7 @@ int datacontrol_sql_get_text_data(resultset_cursor *cursor, int column_index, ch
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
-	// move to column index
+	/* move to column index */
 	for (i = 0; i < column_index; i++) {
 		ret = read(fd, &type, sizeof(int));
 		if (ret == 0) {
@@ -538,7 +538,7 @@ int datacontrol_sql_get_text_data(resultset_cursor *cursor, int column_index, ch
 
 	if (size > 0) {
 		char *data = (char *)malloc((size + 1) * (sizeof(char)));
-		if(!data) {
+		if (!data) {
 			LOGE("unable to create buffer to read");
 			return DATACONTROL_ERROR_OUT_OF_MEMORY;
 		}
