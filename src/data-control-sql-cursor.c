@@ -538,7 +538,7 @@ int datacontrol_sql_get_text_data(resultset_cursor *cursor, int column_index, ch
 
 	if (size > 0) {
 		char *data = (char *)malloc((size + 1) * (sizeof(char)));
-		if(!data) {
+		if (!data) {
 			LOGE("unable to create buffer to read");
 			return DATACONTROL_ERROR_OUT_OF_MEMORY;
 		}
