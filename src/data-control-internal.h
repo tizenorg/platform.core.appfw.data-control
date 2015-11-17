@@ -30,6 +30,7 @@
 
 #define MAX_LEN_DATACONTROL_REQ_TYPE  8
 #define MAX_LEN_DATACONTROL_COLUMN_COUNT  8
+#define MAX_PACKAGE_STR_SIZE		512
 
 #define OSP_K_LAUNCH_TYPE   "__OSP_LAUNCH_TYPE__"
 #define OSP_K_ARG           "__OSP_ARGS__"
@@ -57,8 +58,7 @@
 /**
  * @brief Enumerations of different type of data control requests.
  */
-typedef enum
-{
+typedef enum {
 	DATACONTROL_TYPE_ERROR = -1,
 	DATACONTROL_TYPE_UNDEFINED,
 	DATACONTROL_TYPE_SQL_SELECT,
@@ -69,6 +69,7 @@ typedef enum
 	DATACONTROL_TYPE_MAP_SET,
 	DATACONTROL_TYPE_MAP_ADD,
 	DATACONTROL_TYPE_MAP_REMOVE,
+	DATACONTROL_TYPE_RESPONSE,
 	DATACONTROL_TYPE_MAX = 255
 } datacontrol_request_type;
 
@@ -88,6 +89,54 @@ typedef struct datacontrol_consumer_request {
 	datacontrol_request_type type;
 } datacontrol_consumer_request_info;
 
+typedef struct {
+	int extra_len;
+	bundle_raw *extra_data;
+	char *where;
+} datacontrol_request_sql_s;
+
+typedef struct {
+	int page_number;
+	int count_per_page;
+	int column_count;
+	char **column_list;
+	char *where;
+	char *order;
+} datacontrol_request_sql_select_s;
+
+typedef struct {
+	int page_number;
+	int count_per_page;
+	char *key;
+} datacontrol_request_map_get_s;
+
+typedef struct {
+	char *key;
+	char *value;
+	char *old_value;
+} datacontrol_request_map_s;
+
+typedef struct {
+	bool result;
+	char *error_msg;
+} datacontrol_request_response_s;
+
+typedef struct {
+	int total_len;
+	datacontrol_request_type type;
+	char *provider_id;
+	char *app_id;
+	char *data_id;
+	int request_id;
+	void *sub_data;
+} datacontrol_request_s;
+
+datacontrol_request_s *_read_request_data_from_result_buf(void *buf);
+int _write_request_data_to_result_buffer(datacontrol_request_s *request_data, void **buf);
+
+datacontrol_request_s *_read_request_data_from_buf(void *buf);
+int _write_request_data_to_buffer(datacontrol_request_s *request_data, void **buf);
+
 int _consumer_request_compare_cb(gconstpointer a, gconstpointer b);
 
 int _datacontrol_sql_set_cursor(const char *path);
@@ -104,8 +153,15 @@ int _write_socket(int fd, void *buffer, unsigned int nbytes, unsigned int *bytes
 gboolean _datacontrol_recv_message(GIOChannel *channel, GIOCondition cond, gpointer data);
 int _get_gdbus_shared_connection(GDBusConnection **connection, char *provider_id);
 void _socket_info_free (gpointer socket);
-datacontrol_socket_info * _get_socket_info(const char *caller_id, const char *callee_id, const char *type, GIOFunc cb, void *data);
+datacontrol_socket_info *_get_socket_info(const char *caller_id, const char *callee_id, const char *type, GIOFunc cb, void *data);
 int _request_appsvc_run(const char *caller_id, const char *callee_id);
+int _copy_string_from_request_data(void **to_buf, void *from_buf, int *buf_offset);
+int _copy_from_request_data(void **to_buf, void *from_buf, int *buf_offset, int size);
+datacontrol_request_s *_create_datacontrol_request_s(datacontrol_h provider, datacontrol_request_type type, int request_id, char *app_id);
+void _free_datacontrol_request(datacontrol_request_s *datacontrol_request);
+void _free_datacontrol_request_sub_data(void *data, datacontrol_request_type type);
+int _copy_string_to_request_data(char **to_buf, const char *from_buf, int *total_len);
+int _copy_int_to_request_data(int *to_buf, int from_buf, int *total_len);
 
 
 

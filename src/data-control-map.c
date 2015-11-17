@@ -36,6 +36,7 @@ typedef struct {
 static void *datacontrol_map_tree_root = NULL;
 static const int MAX_ARGUMENT_SIZE = 16384; // 16KB
 static GHashTable *__socket_pair_hash = NULL;
+static char *caller_app_id;
 
 static void __map_call_cb(const char *provider_id, int request_id, datacontrol_request_type type,
 	const char *data_id, bool provider_result, const char *error, char **result_value_list, int result_value_count, void *data)
@@ -117,8 +118,6 @@ static void __map_instance_free(void *datacontrol_map_instance)
 		free(dc->access_info);
 		free(datacontrol_map_instance);
 	}
-
-	return;
 }
 
 static int __map_instance_compare(const void *l_datacontrol_map_instance, const void *r_datacontrol_map_instance)
@@ -137,7 +136,7 @@ static char **__map_get_value_list(int fd, int *value_count)
 	unsigned int nb = 0;
 
 	if (_read_socket(fd, (char *)&count, sizeof(count), &nb)) {
-		LOGE("datacontrol_recv_map_get_value_list : ...from %d: fail to read\n", fd);
+		LOGE("__recv_map_get_value_list %d: fail to read\n", fd);
 		return NULL;
 	}
 
@@ -150,21 +149,16 @@ static char **__map_get_value_list(int fd, int *value_count)
 
 	for (i = 0; i < count; i++) {
 		if (_read_socket(fd, (char *)&nbytes, sizeof(nbytes), &nb)) {
-				LOGE("datacontrol_recv_map_get_value_list : ...from %d: fail to read\n", fd);
+				LOGE("__recv_map_get_value_list %d: fail to read\n", fd);
 				goto ERROR;
 		}
-
-		LOGI("nbytes : %d  %d" , nbytes , nb);
-		value_list[i] = (char *)calloc(nbytes + 1, sizeof(char));
-
+		value_list[i] = (char *) calloc(nbytes + 1, sizeof(char));
 		if (_read_socket(fd, value_list[i], nbytes, &nb)) {
-			LOGE("datacontrol_recv_map_get_value_list : ...from %d: fail to read\n", fd);
+			LOGE("__recv_map_get_value_list %d: fail to read\n", fd);
 			goto ERROR;
 		}
-		LOGI("value_list[i] : %s  %d" , value_list[i] , nb);
 	}
 	*value_count = count;
-
 	return value_list;
 
 ERROR:
@@ -180,6 +174,7 @@ ERROR:
 	return NULL;
 }
 
+
 static void __remove_map_request_info(int request_id, map_response_cb_s *map_dc)
 {
 
@@ -191,162 +186,107 @@ static void __remove_map_request_info(int request_id, map_response_cb_s *map_dc)
 		map_dc->request_info_list = g_list_remove(map_dc->request_info_list, list->data);
 
 }
-
-static int __map_handle_cb(int fd, bundle *b, int request_type, appsvc_result_val res, void *data)
+static datacontrol_request_type __find_map_request_info(int request_id, map_response_cb_s *map_dc)
 {
-	LOGI("__map_handle_cb, request_type: %d", request_type);
+
+	datacontrol_consumer_request_info temp_request_info;
+	temp_request_info.request_id = request_id;
+	GList *list = g_list_find_custom(map_dc->request_info_list, &temp_request_info,
+			(GCompareFunc)_consumer_request_compare_cb);
+	if (list != NULL)
+			return ((datacontrol_consumer_request_info *)list->data)->type;
+	return DATACONTROL_TYPE_ERROR;
+}
+
+static int __map_handle_cb(datacontrol_request_s *request_data, datacontrol_request_type type, void *data, char **value_list, int value_count)
+{
+	LOGI("__map_handle_cb, request_type: %d", type);
 
 	int ret = 0;
-	const char **result_list = NULL;
-	const char *provider_id = NULL;
-	const char *data_id = NULL;
-	const char *error_message = NULL;
-	int request_id = -1;
-	int result_list_len = 0;
-	int provider_result = 0;
-	int value_count = 0;
-	char **value_list = NULL;
-	const char *p = NULL;
 	map_response_cb_s *map_dc = (map_response_cb_s *)data;
 
-	if (!b) {
+	if (request_data)
+		__remove_map_request_info(request_data->request_id, map_dc);
+	else {
 		LOGE("the bundle returned from datacontrol-provider-service is null");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	p = bundle_get_val(b, OSP_K_REQUEST_ID);
-	if (!p) {
-		LOGE("Invalid Bundle: request_id is null");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	} else {
-		request_id = atoi(p);
-	}
+	if (type >= DATACONTROL_TYPE_MAP_GET && type <= DATACONTROL_TYPE_MAP_REMOVE) {
+		__map_call_cb(request_data->provider_id, request_data->request_id, type,
+				request_data->data_id, true, NULL, value_list, value_count, data);
 
-	LOGI("Request ID: %d", request_id);
-
-	__remove_map_request_info(request_id, map_dc);
-
-	// result list
-	result_list = bundle_get_str_array(b, OSP_K_ARG, &result_list_len);
-	if (!result_list) {
-		LOGE("Invalid Bundle: arguement list is null");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	p = result_list[0]; // result list[0] = provider_result
-	if (!p) {
-		LOGE("Invalid Bundle: provider_result is null");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	LOGI("Provider result: %s", p);
-
-	provider_result = atoi(p);
-
-	error_message = result_list[1]; // result list[1] = error
-	if (!error_message) {
-		LOGE("Invalid Bundle: error_message is null");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	LOGI("Error message: %s", error_message);
-
-	provider_id = bundle_get_val(b, OSP_K_DATACONTROL_PROVIDER);
-	if (!provider_id) {
-		LOGE("Invalid Bundle: provider_id is null");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	data_id = bundle_get_val(b, OSP_K_DATACONTROL_DATA);
-	if (!data_id) {
-		LOGE("Invalid Bundle: data_id is null");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	LOGI("Provider ID: %s, Data ID: %s, Operation type: %d", provider_id, data_id, request_type);
-
-	switch (request_type) {
-	case DATACONTROL_TYPE_MAP_GET:
-	{
-		LOGI("GET RESPONSE");
-		if (provider_result) {
-			value_list = __map_get_value_list(fd, &value_count);
-
-			if (value_list == NULL && value_count != 0) {
-				LOGE("Invalid data: value_list is null");
-				return DATACONTROL_ERROR_INVALID_PARAMETER;
-			}
-		}
-		break;
-	}
-	case DATACONTROL_TYPE_MAP_SET:
-	case DATACONTROL_TYPE_MAP_ADD:
-	case DATACONTROL_TYPE_MAP_REMOVE:
-	{
-		LOGI("SET or ADD or REMOVE RESPONSE");
-		break;
-	}
-	default:
-		break;
-	}
-
-	if (request_type >= DATACONTROL_TYPE_MAP_GET && request_type <= DATACONTROL_TYPE_MAP_REMOVE) {
-		__map_call_cb(provider_id, request_id, request_type, data_id, provider_result,
-				error_message, value_list, value_count, data);
 		ret = DATACONTROL_ERROR_NONE;
-	} else
+	} else {
 		ret = DATACONTROL_ERROR_INVALID_PARAMETER;
-
+	}
 
 	return ret;
 }
 
-static int __datacontrol_send_map_async(int sockfd, bundle *kb, datacontrol_request_type type, void *data)
+static int __datacontrol_send_map_async(int sockfd, datacontrol_request_s *request_data, void *data)
 {
 
 	LOGI("send async ~~~");
 
-	bundle_raw *kb_data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
-	int datalen;
-	char *buf = NULL;
-	int total_len;
 	unsigned int nb = 0;
+	int buf_offset = 0;
 
-	bundle_encode_raw(kb, &kb_data, &datalen);
-	if (kb_data == NULL) {
-		LOGE("bundle encode error");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	// encoded bundle + encoded bundle size
-	buf = (char *)calloc(datalen + sizeof(datalen), sizeof(char));
+	void *buf = (void *)calloc(request_data->total_len, sizeof(void));
 	if (buf == NULL) {
-		LOGE("Malloc failed!!");
-		bundle_free_encoded_rawdata(&kb_data);
-		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+		LOGE("Out of memory.");
+		goto out;
 	}
 
-	memcpy(buf, &datalen, sizeof(datalen));
-	memcpy(buf + sizeof(datalen), kb_data, datalen);
+	_copy_from_request_data(&buf, &request_data->total_len, &buf_offset, sizeof(request_data->total_len));
+	_copy_from_request_data(&buf, &request_data->type, &buf_offset, sizeof(request_data->type));
+	_copy_string_from_request_data(&buf, (void *)request_data->provider_id, &buf_offset);
+	_copy_string_from_request_data(&buf, (void *)request_data->data_id, &buf_offset);
+	_copy_string_from_request_data(&buf, (void *)request_data->app_id, &buf_offset);
+	_copy_from_request_data(&buf, &request_data->request_id, &buf_offset, sizeof(request_data->request_id));
 
-	total_len = sizeof(datalen) + datalen;
+	if (request_data->type == DATACONTROL_TYPE_MAP_ADD) {
+		datacontrol_request_map_s *sub_data = (datacontrol_request_map_s *)request_data->sub_data;
+		_copy_string_from_request_data(&buf, (void *)sub_data->key, &buf_offset);
+		_copy_string_from_request_data(&buf, (void *)sub_data->value, &buf_offset);
 
-	LOGI("write : %d", datalen);
-	if (_write_socket(sockfd, buf, total_len, &nb) != DATACONTROL_ERROR_NONE) {
+	} else if (request_data->type == DATACONTROL_TYPE_MAP_SET) {
+		datacontrol_request_map_s *sub_data = (datacontrol_request_map_s *)request_data->sub_data;
+		_copy_string_from_request_data(&buf, (void *)sub_data->key, &buf_offset);
+		_copy_string_from_request_data(&buf, (void *)sub_data->old_value, &buf_offset);
+		_copy_string_from_request_data(&buf, (void *)sub_data->value, &buf_offset);
+
+	} else if (request_data->type == DATACONTROL_TYPE_MAP_REMOVE) {
+		datacontrol_request_map_s *sub_data = (datacontrol_request_map_s *)request_data->sub_data;
+		_copy_string_from_request_data(&buf, (void *)sub_data->key, &buf_offset);
+		_copy_string_from_request_data(&buf, (void *)sub_data->value, &buf_offset);
+
+	} else if (request_data->type == DATACONTROL_TYPE_MAP_GET) {
+		datacontrol_request_map_get_s *sub_data = (datacontrol_request_map_get_s *)request_data->sub_data;
+		_copy_string_from_request_data(&buf, (void *)sub_data->key, &buf_offset);
+		_copy_from_request_data(&buf, &sub_data->page_number, &buf_offset, sizeof(sub_data->page_number));
+		_copy_from_request_data(&buf, &sub_data->count_per_page, &buf_offset, sizeof(sub_data->count_per_page));
+
+	}
+
+	if (_write_socket(sockfd, buf,  request_data->total_len, &nb) != DATACONTROL_ERROR_NONE) {
 		LOGI("write data fail");
 		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
 	}
-	free(buf);
-	bundle_free_encoded_rawdata(&kb_data);
+
+out:
+	if (buf)
+		free(buf);
+
 	return ret;
 }
 
 
 static gboolean __recv_map_message(GIOChannel *channel,
 		GIOCondition cond,
-		gpointer data)
-{
+		gpointer data) {
 
 	gint fd = g_io_channel_unix_get_fd(channel);
 	gboolean retval = TRUE;
@@ -362,32 +302,29 @@ static gboolean __recv_map_message(GIOChannel *channel,
 
 	if (cond & G_IO_IN) {
 		char *buf;
-		int nbytes;
+		int data_len = 0;
 		guint nb;
-		int request_type = 0;
-		const char *request_code = NULL;
 
-		if (_read_socket(fd, (char *)&nbytes, sizeof(nbytes), &nb)) {
-			LOGE("Fail to read nbytes from socket");
+		if (_read_socket(fd, (char *)&data_len, sizeof(data_len), &nb)) {
+			LOGE("Fail to read data_len from socket");
 			goto error;
 		}
-		LOGI("nbytes : %d", nbytes);
+		LOGI("data_len : %d", data_len);
 
 		if (nb == 0) {
 			LOGE("__recv_map_message: ...from %d: socket closed\n", fd);
 			goto error;
 		}
 
-		LOGI("__recv_map_message: ...from %d: %d bytes\n", fd, nbytes);
-		if (nbytes > 0) {
-			bundle *kb = NULL;
+		LOGI("_recv_map_message: ...from %d: %d bytes\n", fd, data_len);
+		if (data_len > 0) {
 
-			buf = (char *) calloc(nbytes + 1, sizeof(char));
+			buf = (char *)calloc(data_len + 1, sizeof(char));
 			if (buf == NULL) {
 				LOGE("Malloc failed!!");
 				goto error;
 			}
-			if (_read_socket(fd, buf, nbytes, &nb)) {
+			if (_read_socket(fd, buf, data_len - sizeof(data_len), &nb)) {
 				free(buf);
 				LOGE("Fail to read buf from socket");
 				goto error;
@@ -399,40 +336,29 @@ static gboolean __recv_map_message(GIOChannel *channel,
 				goto error;
 			}
 
-			kb = bundle_decode_raw((bundle_raw *)buf, nbytes);
-			if (kb == NULL) {
+			datacontrol_request_s *request_data = _read_request_data_from_result_buf(buf);
+			if (buf)
 				free(buf);
-				LOGE("__recv_map_message: Unable to decode the bundle\n");
-				goto error;
-			}
-
-			LOGI("__recv_map_message: ...from %d: OK\n", fd);
-			LOGI("__recv_map_message: ...caller appid %s: OK\n", bundle_get_val(kb, AUL_K_CALLER_APPID));
 
 			if (data) {
-				request_code = bundle_get_val(kb, OSP_K_DATACONTROL_REQUEST_TYPE);
-				if (!request_code) {
-					LOGE("Invalid Bundle: data-control request type is null");
-					free(buf);
-					bundle_free(kb);
-					goto error;
+				datacontrol_request_type req_type = __find_map_request_info(request_data->request_id, (map_response_cb_s *)data);
+				char **value_list = NULL;
+				int value_count = 0;
+				if (req_type == DATACONTROL_TYPE_MAP_GET) {
+					value_list = __map_get_value_list(fd, &value_count);
+					if (value_list == NULL && value_count != 0) {
+						_free_datacontrol_request(request_data);
+						return FALSE;
+					}
 				}
-				request_type = atoi(request_code);
-
-				if (__map_handle_cb(fd, kb, request_type, 0, data) != DATACONTROL_ERROR_NONE) {
-					free(buf);
-					bundle_free(kb);
-					goto error;
-				}
+				__map_handle_cb(request_data, req_type, data, value_list, value_count);
+				_free_datacontrol_request(request_data);
 
 			} else {
 				LOGE("error: listener information is null");
-				free(buf);
-				bundle_free(kb);
+				_free_datacontrol_request(request_data);
 				goto error;
 			}
-			free(buf);
-			bundle_free(kb);
 		}
 	}
 	return retval;
@@ -458,16 +384,16 @@ error:
 	return FALSE;
 }
 
-static int __map_request_provider(datacontrol_h provider, datacontrol_request_type type, bundle *request_data, int request_id)
+static int __map_request_provider(datacontrol_h provider, datacontrol_request_s *request_data)
 {
-	LOGI("Map Data control request, type: %d, request id: %d", type, request_id);
+	LOGI("Map Data control request, type: %d, request id: %d", request_data->type, request_data->request_id);
 
 	char *app_id = NULL;
 	void *data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
 
-	if (type < DATACONTROL_TYPE_MAP_GET || type > DATACONTROL_TYPE_MAP_REMOVE) {
-		LOGE("Invalid request type: %d", (int)type);
+	if (request_data->type < DATACONTROL_TYPE_MAP_GET || request_data->type > DATACONTROL_TYPE_MAP_REMOVE) {
+		LOGE("Invalid request type: %d", (int)request_data->type);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
@@ -518,30 +444,10 @@ static int __map_request_provider(datacontrol_h provider, datacontrol_request_ty
 	map_response_cb_s *map_dc = *(map_response_cb_s **)map_dc_returned;
 	app_id = map_dc->app_id;
 	datacontrol_consumer_request_info *request_info = (datacontrol_consumer_request_info *)calloc(sizeof(datacontrol_consumer_request_info), 1);
-	request_info->request_id = request_id;
-	request_info->type = type;
+	request_info->request_id = request_data->request_id;
+	request_info->type = request_data->type;
 	map_dc->request_info_list = g_list_append(map_dc->request_info_list, request_info);
 	data = map_dc;
-
-	LOGI("Map datacontrol appid: %s", map_dc->app_id);
-
-	char caller_app_id[255];
-	pid_t pid = getpid();
-	if (aul_app_get_appid_bypid(pid, caller_app_id, sizeof(caller_app_id)) != 0) {
-		LOGE("Failed to get appid by pid(%d).", pid);
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	bundle_add_str(request_data, OSP_K_DATACONTROL_PROTOCOL_VERSION, OSP_V_VERSION_2_1_0_3);
-	bundle_add_str(request_data, AUL_K_CALLER_APPID, caller_app_id);
-
-	char datacontrol_request_operation[MAX_LEN_DATACONTROL_REQ_TYPE] = {0, };
-	snprintf(datacontrol_request_operation, MAX_LEN_DATACONTROL_REQ_TYPE, "%d", (int)(type));
-	bundle_add_str(request_data, OSP_K_DATACONTROL_REQUEST_TYPE, datacontrol_request_operation);
-
-	char req_id[32] = {0,};
-	snprintf(req_id, 32, "%d", request_id);
-	bundle_add_str(request_data, OSP_K_REQUEST_ID, req_id);
 
 	int count = 0;
 	const int TRY_COUNT = 2;
@@ -553,19 +459,19 @@ static int __map_request_provider(datacontrol_h provider, datacontrol_request_ty
 
 		if (socket_info == NULL) {
 			ret = _request_appsvc_run(caller_app_id, app_id);
-			if(ret != DATACONTROL_ERROR_NONE)
+			if (ret != DATACONTROL_ERROR_NONE)
 				return ret;
 
-			socket_info = _get_socket_info(caller_app_id, app_id, "consumer", __recv_map_message, data);
+			socket_info = _get_socket_info(caller_app_id, app_id,
+					"consumer", __recv_map_message, data);
 			if (socket_info == NULL)
 				return DATACONTROL_ERROR_IO_ERROR;
 
 			g_hash_table_insert(__socket_pair_hash, strdup(provider->provider_id), socket_info);
 		}
 
-		LOGI("send data from consumer !!!");
-		ret = __datacontrol_send_map_async(socket_info->socket_fd, request_data, type, NULL);
-		if(ret != DATACONTROL_ERROR_NONE)
+		ret = __datacontrol_send_map_async(socket_info->socket_fd, request_data, NULL);
+		if (ret != DATACONTROL_ERROR_NONE)
 			g_hash_table_remove(__socket_pair_hash, provider->provider_id);
 		else
 			break;
@@ -681,6 +587,15 @@ int datacontrol_map_register_response_cb(datacontrol_h provider, datacontrol_map
 	char *app_id = NULL;
 	char *access = NULL;
 
+	if (caller_app_id == NULL) {
+		caller_app_id = (char *)calloc(MAX_PACKAGE_STR_SIZE, sizeof(char));
+		pid_t pid = getpid();
+		if (aul_app_get_appid_bypid(pid, caller_app_id, MAX_PACKAGE_STR_SIZE) != 0) {
+			SECURE_LOGE("Failed to get appid by pid(%d).", pid);
+			return DATACONTROL_ERROR_INVALID_PARAMETER;
+		}
+	}
+
 	ret = pkgmgrinfo_appinfo_usr_get_datacontrol_info(provider->provider_id, "Map", getuid(), &app_id, &access);
 	if (ret != PMINFO_R_OK) {
 		LOGE("unable to get map data control information: %d", ret);
@@ -791,184 +706,135 @@ int datacontrol_map_get(datacontrol_h provider, const char *key, int *request_id
 
 int datacontrol_map_get_with_page(datacontrol_h provider, const char *key, int *request_id, int page_number, int count_per_page)
 {
+	int ret = 0;
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL || key == NULL) {
 		LOGE("Invalid parameter");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	LOGI("Gets the value list from provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
+	*request_id = _datacontrol_create_request_id();
 
-	long long arg_size = (strlen(provider->data_id) + strlen(key)) * sizeof(wchar_t);
-	if (arg_size > MAX_ARGUMENT_SIZE) {
-		LOGE("The size of sending argument (%lld) exceeds the maximum limit.", arg_size);
-		return DATACONTROL_ERROR_MAX_EXCEEDED;
-	}
-
-	int ret = 0;
-	bundle *b = bundle_create();
-	if (!b) {
-		LOGE("unable to create bundle: %d", errno);
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
-	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
-
-	const char *arg_list[4];
-	arg_list[0] = provider->data_id;
-	arg_list[1] = key;
-
-	char page_no_str[32] = {0, };
-	ret = snprintf(page_no_str, 32, "%d", page_number);
-	if (ret < 0) {
-		LOGE("unable to convert page no to string: %d", errno);
-		bundle_free(b);
+	datacontrol_request_s *map_request = _create_datacontrol_request_s(provider, DATACONTROL_TYPE_MAP_GET, *request_id, caller_app_id);
+	if (!map_request) {
+		LOGE("unable to create map request: %d", errno);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
 	}
 
-	char count_per_page_str[32] = {0, };
-	ret = snprintf(count_per_page_str, 32, "%d", count_per_page);
-	if (ret < 0) {
-		LOGE("unable to convert count per page no to string: %d", errno);
-		bundle_free(b);
+	datacontrol_request_map_get_s *sub_data = (datacontrol_request_map_get_s *)calloc(1, sizeof(datacontrol_request_map_get_s));
+	if (!sub_data) {
+		LOGE("unable to create sub_data: %d", errno);
+		_free_datacontrol_request(map_request);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
 	}
+	map_request->sub_data = sub_data;
 
-	arg_list[2] = page_no_str;
-	arg_list[3] = count_per_page_str;
+	_copy_int_to_request_data(&sub_data->page_number, page_number, &map_request->total_len);
+	_copy_int_to_request_data(&sub_data->count_per_page, count_per_page, &map_request->total_len);
+	_copy_string_to_request_data(&sub_data->key, key, &map_request->total_len);
 
-	bundle_add_str_array(b, OSP_K_ARG, arg_list, 4);
-
-	// Set the request id
-	int reqId = _datacontrol_create_request_id();
-	*request_id = reqId;
-
-	ret = __map_request_provider(provider, DATACONTROL_TYPE_MAP_GET, b, reqId);
-	bundle_free(b);
+	ret = __map_request_provider(provider, map_request);
+	_free_datacontrol_request(map_request);
 
 	return ret;
 }
 
 int datacontrol_map_set(datacontrol_h provider, const char *key, const char *old_value, const char *new_value, int *request_id)
 {
+	int ret = 0;
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL || key == NULL || old_value == NULL || new_value == NULL) {
 		LOGE("Invalid parameter");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	LOGI("Sets the old value to new value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
+	*request_id = _datacontrol_create_request_id();
 
-	long long arg_size = (strlen(provider->data_id) + strlen(key) + strlen(old_value) + strlen(new_value)) * sizeof(wchar_t);
-	if (arg_size > MAX_ARGUMENT_SIZE) {
-		LOGE("The size of sending argument (%lld) exceeds the maximum limit.", arg_size);
-		return DATACONTROL_ERROR_MAX_EXCEEDED;
-	}
-
-	bundle *b = bundle_create();
-	if (!b) {
-		LOGE("unable to create bundle: %d", errno);
+	datacontrol_request_s *map_request = _create_datacontrol_request_s(provider, DATACONTROL_TYPE_MAP_SET, *request_id, caller_app_id);
+	if (!map_request) {
+		LOGE("unable to create map request: %d", errno);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
 	}
 
-	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
-	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
+	datacontrol_request_map_s *sub_data = (datacontrol_request_map_s *)calloc(1, sizeof(datacontrol_request_map_s));
+	if (!sub_data) {
+		LOGE("unable to create sub_data: %d", errno);
+		_free_datacontrol_request(map_request);
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+	map_request->sub_data = sub_data;
 
-	const char *arg_list[4];
-	arg_list[0] = provider->data_id;
-	arg_list[1] = key;
-	arg_list[2] = old_value;
-	arg_list[3] = new_value;
+	_copy_string_to_request_data(&sub_data->key, key, &map_request->total_len);
+	_copy_string_to_request_data(&sub_data->old_value, old_value, &map_request->total_len);
+	_copy_string_to_request_data(&sub_data->value, new_value, &map_request->total_len);
 
-	bundle_add_str_array(b, OSP_K_ARG, arg_list, 4);
-
-	// Set the request id
-	int reqId = _datacontrol_create_request_id();
-	*request_id = reqId;
-
-	int ret = __map_request_provider(provider, DATACONTROL_TYPE_MAP_SET, b, reqId);
-	bundle_free(b);
+	ret = __map_request_provider(provider, map_request);
+	_free_datacontrol_request(map_request);
 
 	return ret;
 }
 
 int datacontrol_map_add(datacontrol_h provider, const char *key, const char *value, int *request_id)
 {
+	int ret = 0;
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL || key == NULL || value == NULL) {
 		LOGE("Invalid parameter");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	LOGI("Adds the value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
+	*request_id = _datacontrol_create_request_id();
 
-	long long arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
-	if (arg_size > MAX_ARGUMENT_SIZE) {
-		LOGE("The size of sending argument (%lld) exceeds the maximum limit.", arg_size);
-		return DATACONTROL_ERROR_MAX_EXCEEDED;
-	}
-
-	bundle *b = bundle_create();
-	if (!b) {
-		LOGE("unable to create bundle: %d", errno);
+	datacontrol_request_s *map_request = _create_datacontrol_request_s(provider, DATACONTROL_TYPE_MAP_ADD, *request_id, caller_app_id);
+	if (!map_request) {
+		LOGE("unable to create map request: %d", errno);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
 	}
 
-	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
-	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
+	datacontrol_request_map_s *sub_data = (datacontrol_request_map_s *)calloc(1, sizeof(datacontrol_request_map_s));
+	if (!sub_data) {
+		LOGE("unable to create sub_data: %d", errno);
+		_free_datacontrol_request(map_request);
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+	map_request->sub_data = sub_data;
 
-	const char *arg_list[3];
-	arg_list[0] = provider->data_id;
-	arg_list[1] = key;
-	arg_list[2] = value;
+	_copy_string_to_request_data(&sub_data->key, key, &map_request->total_len);
+	_copy_string_to_request_data(&sub_data->value, value, &map_request->total_len);
 
-	bundle_add_str_array(b, OSP_K_ARG, arg_list, 3);
-
-	// Set the request id
-	int reqId = _datacontrol_create_request_id();
-	*request_id = reqId;
-
-	int ret = __map_request_provider(provider, DATACONTROL_TYPE_MAP_ADD, b, reqId);
-	bundle_free(b);
+	ret = __map_request_provider(provider, map_request);
+	_free_datacontrol_request(map_request);
 
 	return ret;
 }
 
 int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *value, int *request_id)
 {
+	int ret = 0;
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL || key == NULL || value == NULL) {
 		LOGE("Invalid parameter");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	LOGI("Removes the value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
+	*request_id = _datacontrol_create_request_id();
 
-	long long arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
-	if (arg_size > MAX_ARGUMENT_SIZE) {
-		LOGE("The size of sending argument (%lld) exceeds the maximum limit.", arg_size);
-		return DATACONTROL_ERROR_MAX_EXCEEDED;
-	}
-
-	bundle *b = bundle_create();
-	if (!b) {
-		LOGE("unable to create bundle: %d", errno);
+	datacontrol_request_s *map_request = _create_datacontrol_request_s(provider, DATACONTROL_TYPE_MAP_REMOVE, *request_id, caller_app_id);
+	if (!map_request) {
+		LOGE("unable to create map request: %d", errno);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
 	}
 
-	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
-	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
+	datacontrol_request_map_s *sub_data = (datacontrol_request_map_s *)calloc(1, sizeof(datacontrol_request_map_s));
+	if (!sub_data) {
+		LOGE("unable to create sub_data: %d", errno);
+		_free_datacontrol_request(map_request);
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+	map_request->sub_data = sub_data;
 
-	const char *arg_list[3];
-	arg_list[0] = provider->data_id;
-	arg_list[1] = key;
-	arg_list[2] = value;
+	_copy_string_to_request_data(&sub_data->key, key, &map_request->total_len);
+	_copy_string_to_request_data(&sub_data->value, value, &map_request->total_len);
 
-	bundle_add_str_array(b, OSP_K_ARG, arg_list, 3);
 
-	// Set the request id
-	int reqId = _datacontrol_create_request_id();
-	*request_id = reqId;
-
-	int ret = __map_request_provider(provider, DATACONTROL_TYPE_MAP_REMOVE, b, reqId);
-	bundle_free(b);
+	ret = __map_request_provider(provider, map_request);
+	_free_datacontrol_request(map_request);
 
 	return ret;
 }
