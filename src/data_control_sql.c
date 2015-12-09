@@ -32,9 +32,7 @@ __sql_insert_response(int req_id, datacontrol_h provider, long long insert_rowid
 
 	data_control_sql_response_cb *callback = (data_control_sql_response_cb*)g_hash_table_lookup(response_table, provider->provider_id);
 	if (callback)
-	{
 		callback->insert_cb(req_id, (data_control_h)provider, insert_rowid, provider_result, error, user_data);
-	}
 }
 
 void
@@ -44,9 +42,7 @@ __sql_update_response(int req_id, datacontrol_h provider, bool provider_result, 
 
 	data_control_sql_response_cb *callback = (data_control_sql_response_cb*)g_hash_table_lookup(response_table, provider->provider_id);
 	if (callback)
-	{
 		callback->update_cb(req_id, (data_control_h)provider, provider_result, error, user_data);
-	}
 }
 
 void
@@ -56,9 +52,7 @@ __sql_delete_response(int req_id, datacontrol_h provider, bool provider_result, 
 
 	data_control_sql_response_cb *callback = (data_control_sql_response_cb*)g_hash_table_lookup(response_table, provider->provider_id);
 	if (callback)
-	{
 		callback->delete_cb(req_id, (data_control_h)provider, provider_result, error, user_data);
-	}
 }
 
 void
@@ -68,16 +62,13 @@ __sql_select_response(int req_id, datacontrol_h provider, resultset_cursor* enum
 
 	data_control_sql_response_cb *callback = (data_control_sql_response_cb*)g_hash_table_lookup(response_table, provider->provider_id);
 	if (callback)
-	{
 		callback->select_cb(req_id, (data_control_h)provider, (result_set_cursor)enumerator, provider_result, error, user_data);
-	}
 }
 
 static void
 __free_data(gpointer data)
 {
-	if (data)
-	{
+	if (data) {
 		g_free(data);
 		data = NULL;
 	}
@@ -134,25 +125,18 @@ EXPORT_API int
 data_control_sql_register_response_cb(data_control_h provider, data_control_sql_response_cb* callback, void *user_data)
 {
 	if (response_table == NULL)
-	{
 		__initialize();
-	}
 
 	if (callback == NULL)
-	{
 		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
-	}
 
 	char *id = strdup(provider->provider_id);
 	if (id == NULL)
-	{
 		return DATA_CONTROL_ERROR_OUT_OF_MEMORY;
-	}
 
 	data_control_sql_response_cb *cb
 		= (data_control_sql_response_cb *)malloc(sizeof(data_control_sql_response_cb));
-	if (cb == NULL)
-	{
+	if (cb == NULL) {
 		free(id);
 		return DATA_CONTROL_ERROR_OUT_OF_MEMORY;
 	}
@@ -167,9 +151,7 @@ EXPORT_API int
 data_control_sql_unregister_response_cb(data_control_h provider)
 {
 	if (provider->provider_id)
-	{
 		g_hash_table_remove(response_table, provider->provider_id);
-	}
 
 	return datacontrol_sql_unregister_response_cb((datacontrol_h)provider);
 }
