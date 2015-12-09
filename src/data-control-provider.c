@@ -52,7 +52,7 @@
 static GHashTable *__request_table = NULL;
 static GHashTable *__socket_pair_hash = NULL;
 
-//static pthread_mutex_t provider_lock = PTHREAD_MUTEX_INITIALIZER;
+/* static pthread_mutex_t provider_lock = PTHREAD_MUTEX_INITIALIZER; */
 
 struct datacontrol_s {
 	char *provider_id;
@@ -93,13 +93,15 @@ static int __send_select_result(int fd, bundle *b, void *data)
 
 	LOGI("__send_select_result");
 
-	// In this function, the result set is written in socket as specific form.
-	// [sizeof(int)] column count
-	// [sizeof(int)] column type x N
-	// [  variant  ] (column name leng, column name) x N
-	// [sieeof(int)] total size of column names
-	// [sizeof(int)] row count
-	// [  variant  ] (type, size, content) x N
+	/*
+	 In this function, the result set is written in socket as specific form.
+	 [sizeof(int)] column count
+	 [sizeof(int)] column type x N
+	 [  variant  ] (column name leng, column name) x N
+	 [sieeof(int)] total size of column names
+	 [sizeof(int)] row count
+	 [  variant  ] (type, size, content) x N
+	*/
 
 	sqlite3_stmt *state = (sqlite3_stmt *)data;
 	int column_count = DATACONTROL_RESULT_NO_DATA;
@@ -132,7 +134,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 		return DATACONTROL_ERROR_NONE;
 	}
 
-	// 1. column count
+	/* 1. column count */
 	column_count = sqlite3_column_count(state);
 	if (_write_socket(fd, &column_count, sizeof(int), &nb) != DATACONTROL_ERROR_NONE) {
 		LOGE("Writing a column_count to a file descriptor is failed. errno = %d", errno);
@@ -141,12 +143,14 @@ static int __send_select_result(int fd, bundle *b, void *data)
 
 	LOGI("Writing a column_count %d", column_count);
 
-	// 2. column type x column_count
-	// #define SQLITE_INTEGER	1
-	// #define SQLITE_FLOAT	2
-	// #define SQLITE_TEXT	3
-	// #define SQLITE_BLOB	4
-	// #define SQLITE_NULL	5
+	/*
+	 2. column type x column_count
+	 #define SQLITE_INTEGER	1
+	 #define SQLITE_FLOAT	2
+	 #define SQLITE_TEXT	3
+	 #define SQLITE_BLOB	4
+	 #define SQLITE_NULL	5
+	*/
 	for (i = 0; i < column_count; i++) {
 		int type = sqlite3_column_type(state, i);
 		if (_write_socket(fd, &type, sizeof(int), &nb) != DATACONTROL_ERROR_NONE) {
@@ -156,7 +160,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 		LOGI("Writing a column_type %d", type);
 	}
 
-	// 3. column name x column_count
+	/* 3. column name x column_count */
 	for (i = 0; i < column_count; i++) {
 		column_name = (char *)sqlite3_column_name(state, i);
 		if (column_name == NULL) {
@@ -180,7 +184,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 		}
 	}
 
-	// 4. total length of column names
+	/* 4. total length of column names */
 	if (_write_socket(fd, &total_len_of_column_names, sizeof(int), &nb) != DATACONTROL_ERROR_NONE) {
 		LOGI("Writing a total_len_of_column_names to a file descriptor is failed. errno = %d", errno);
 		return DATACONTROL_ERROR_IO_ERROR;
@@ -194,7 +198,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 
 	LOGI("page_number: %s, per_page: %s", page_number_str, count_per_page_str);
 
-	// 5. type, size and value of each element
+	/* 5. type, size and value of each element */
 	if (page_number_str != NULL)
 		page_number = atoi(page_number_str);
 	else
@@ -224,7 +228,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 			++row_count;
 	} while (sqlite3_step(state) == SQLITE_ROW && row_count < count_per_page);
 
-	// 6. row count
+	/* 6. row count */
 	if (_write_socket(fd, &row_count, sizeof(row_count), &nb) != DATACONTROL_ERROR_NONE) {
 		LOGI("Writing a row_count to a file descriptor is failed. errno = %d", errno);
 		return DATACONTROL_ERROR_IO_ERROR;
@@ -338,7 +342,7 @@ static int __send_get_value_result(int fd, bundle *b, void *data)
 	int remain_count = value_count - current_offset;
 	unsigned int nb;
 
-	remain_count = (remain_count > 0) ? remain_count : 0;	// round off to zero if the negative num is found
+	remain_count = (remain_count > 0) ? remain_count : 0;	/* round off to zero if the negative num is found */
 
 	int add_value_count = (count_per_page > remain_count) ? remain_count : count_per_page;
 
@@ -385,7 +389,7 @@ int __datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type ty
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
 	}
 
-	// encoded bundle + encoded bundle len
+	/* encoded bundle + encoded bundle len */
 	buf = (char *)calloc(datalen + 4, sizeof(char));
 	memcpy(buf, &datalen, sizeof(datalen));
 	memcpy(buf + sizeof(datalen), kb_data, datalen);
@@ -447,7 +451,7 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 
 	bundle *res = bundle_create();
 
-	// Set the type
+	/* Set the type */
 	char type_str[MAX_LEN_DATACONTROL_REQ_TYPE] = {0,};
 
 	if (type == DATACONTROL_TYPE_UNDEFINED || type == DATACONTROL_TYPE_ERROR) {
@@ -460,15 +464,15 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 
 	bundle_add_str(res, OSP_K_DATACONTROL_REQUEST_TYPE, type_str);
 
-	// Set the provider id
+	/* Set the provider id */
 	char *provider_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_PROVIDER);
 	bundle_add_str(res, OSP_K_DATACONTROL_PROVIDER, provider_id);
 
-	// Set the data id
+	/* Set the data id */
 	char *data_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_DATA);
 	bundle_add_str(res, OSP_K_DATACONTROL_DATA, data_id);
 
-	// Set the caller request id
+	/* Set the caller request id */
 	char *request_id = (char *)bundle_get_val(b, OSP_K_REQUEST_ID);
 	bundle_add_str(res, OSP_K_REQUEST_ID, request_id);
 
@@ -480,7 +484,7 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 	{
 		const char *list[3];
 
-		list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
+		list[PACKET_INDEX_REQUEST_RESULT] = "1";		/* request result */
 		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
 		list[PACKET_INDEX_SELECT_RESULT_FILE] = DATACONTROL_EMPTY;
 
@@ -502,10 +506,10 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 		long long row_id = *(long long *)data;
 
 		const char *list[3];
-		list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
+		list[PACKET_INDEX_REQUEST_RESULT] = "1";		/* request result */
 		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
 
-		// Set the row value
+		/* Set the row value */
 		char row_str[ROW_ID_SIZE] = {0,};
 		snprintf(row_str, ROW_ID_SIZE, "%lld", row_id);
 
@@ -517,7 +521,7 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 	case DATACONTROL_TYPE_SQL_DELETE:
 	{
 		const char *list[2];
-		list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
+		list[PACKET_INDEX_REQUEST_RESULT] = "1";		/* request result */
 		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
 
 		bundle_add_str_array(res, OSP_K_ARG, list, 2);
@@ -526,7 +530,7 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 	case DATACONTROL_TYPE_MAP_GET:
 	{
 		const char *list[4];
-		list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
+		list[PACKET_INDEX_REQUEST_RESULT] = "1";		/* request result */
 		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
 
 		bundle_add_str_array(res, OSP_K_ARG, list, 2);
@@ -540,20 +544,20 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 
 		break;
 	}
-	case DATACONTROL_TYPE_UNDEFINED:	// DATACONTROL_TYPE_MAP_SET || ADD || REMOVE
+	case DATACONTROL_TYPE_UNDEFINED:	/* DATACONTROL_TYPE_MAP_SET || ADD || REMOVE */
 	{
 		const char *list[2];
-		list[PACKET_INDEX_REQUEST_RESULT] = "1";		// request result
+		list[PACKET_INDEX_REQUEST_RESULT] = "1";		/* request result */
 		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
 
 		bundle_add_str_array(res, OSP_K_ARG, list, 2);
 		break;
 	}
-	default:  // Error
+	default:  /* Error */
 	{
 		const char *list[2];
-		list[PACKET_INDEX_REQUEST_RESULT] = "0";		// request result
-		list[PACKET_INDEX_ERROR_MSG] = (char *)data;  // error string
+		list[PACKET_INDEX_REQUEST_RESULT] = "0";		/* request result */
+		list[PACKET_INDEX_ERROR_MSG] = (char *)data;  /* error string */
 
 		bundle_add_str_array(res, OSP_K_ARG, list, 2);
 		break;
@@ -592,7 +596,7 @@ int __provider_process(bundle *b, int fd)
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	// Get the request type
+	/* Get the request type */
 	datacontrol_request_type type = atoi(request_type);
 	if (type >= DATACONTROL_TYPE_SQL_SELECT && type <= DATACONTROL_TYPE_SQL_DELETE)	{
 		if (provider_sql_cb == NULL) {
@@ -620,18 +624,18 @@ int __provider_process(bundle *b, int fd)
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
-	// Set the provider ID
+	/* Set the provider ID */
 	provider->provider_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_PROVIDER);
 
-	// Set the data ID
+	/* Set the data ID */
 	provider->data_id = (char *)arg_list[PACKET_INDEX_DATAID];
 
-	// Set the request ID
+	/* Set the request ID */
 	int provider_req_id = __provider_new_request_id();
 
 	LOGI("Provider ID: %s, data ID: %s, request type: %s", provider->provider_id, provider->data_id, request_type);
 
-	// Add the data to the table
+	/* Add the data to the table */
 	int *key = malloc(sizeof(int));
 	if (key == NULL) {
 		LOGE("Out of memory. fail to malloc key");
@@ -651,7 +655,7 @@ int __provider_process(bundle *b, int fd)
 	{
 		int i = 1;
 		int current = 0;
-		int column_count = atoi(arg_list[i++]); // Column count
+		int column_count = atoi(arg_list[i++]); /* Column count */
 
 		LOGI("SELECT column count: %d", column_count);
 		const char **column_list = (const char **)malloc(column_count * (sizeof(char *)));
@@ -661,12 +665,12 @@ int __provider_process(bundle *b, int fd)
 		}
 
 		while (current < column_count) {
-			column_list[current++] = arg_list[i++];  // Column data
+			column_list[current++] = arg_list[i++];  /* Column data */
 			LOGI("Column %d: %s", current, column_list[current-1]);
 		}
 
-		const char *where = arg_list[i++];  // where
-		const char *order = arg_list[i++];  // order
+		const char *where = arg_list[i++];  /* where */
+		const char *order = arg_list[i++];  /* order */
 		LOGI("where: %s, order: %s", where, order);
 
 		if (strncmp(where, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0)
@@ -866,7 +870,7 @@ int datacontrol_provider_sql_register_cb(datacontrol_provider_sql_cb *callback, 
 	provider_sql_cb = callback;
 	provider_sql_user_data = user_data;
 
-	// If the provider_map_cb was registered(not NULL), __datacontrol_handler_cb is set already.
+	/* If the provider_map_cb was registered(not NULL), __datacontrol_handler_cb is set already. */
 	if (provider_map_cb == NULL)
 		ret = aul_set_data_control_provider_cb(__datacontrol_handler_cb);
 
@@ -875,7 +879,7 @@ int datacontrol_provider_sql_register_cb(datacontrol_provider_sql_cb *callback, 
 
 int datacontrol_provider_sql_unregister_cb(void)
 {
-	// When both SQL_cb and Map_cb are unregisted, unsetting the provider cb is possible.
+	/* When both SQL_cb and Map_cb are unregisted, unsetting the provider cb is possible. */
 	if (provider_map_cb == NULL)
 		aul_unset_data_control_provider_cb();
 
@@ -900,7 +904,7 @@ int datacontrol_provider_map_register_cb(datacontrol_provider_map_cb *callback, 
 	provider_map_cb = callback;
 	provider_map_user_data = user_data;
 
-	// If the provider_sql_cb was registered(not NULL), __datacontrol_handler_cb is set already.
+	/* If the provider_sql_cb was registered(not NULL), __datacontrol_handler_cb is set already. */
 	if (provider_sql_cb == NULL)
 		ret = aul_set_data_control_provider_cb(__datacontrol_handler_cb);
 
@@ -909,7 +913,7 @@ int datacontrol_provider_map_register_cb(datacontrol_provider_map_cb *callback, 
 
 int datacontrol_provider_map_unregister_cb(void)
 {
-	// When both SQL_cb and Map_cb are unregisted, unsetting the provider cb is possible.
+	/* When both SQL_cb and Map_cb are unregisted, unsetting the provider cb is possible. */
 	if (provider_sql_cb == NULL)
 		aul_unset_data_control_provider_cb();
 

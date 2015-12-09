@@ -23,7 +23,7 @@
 #include "data-control-internal.h"
 
 #define REQUEST_PATH_MAX		512
-#define MAX_REQUEST_ARGUMENT_SIZE	1048576	// 1MB
+#define MAX_REQUEST_ARGUMENT_SIZE	1048576	/* 1MB */
 
 struct datacontrol_s {
 	char *provider_id;
@@ -171,14 +171,14 @@ static int __sql_handle_cb(bundle *b, void *data, resultset_cursor *cursor)
 
 		__remove_sql_request_info(request_id, sql_dc);
 
-		// result list
+		/* result list */
 		result_list = appsvc_get_data_array(b, OSP_K_ARG, &result_list_len);
 		if (!result_list) {
 			LOGE("Invalid Bundle: arguement list is null");
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
 		}
 
-		p = result_list[0]; // result list[0] = provider_result
+		p = result_list[0]; /* result list[0] = provider_result */
 		if (!p) {
 			LOGE("Invalid Bundle: provider_result is null");
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -188,7 +188,7 @@ static int __sql_handle_cb(bundle *b, void *data, resultset_cursor *cursor)
 
 		provider_result = atoi(p);
 
-		error_message = result_list[1]; // result list[1] = error
+		error_message = result_list[1]; /* result list[1] = error */
 		if (!error_message) {
 			LOGE("Invalid Bundle: error_message is null");
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -224,7 +224,7 @@ static int __sql_handle_cb(bundle *b, void *data, resultset_cursor *cursor)
 		{
 			LOGI("INSERT RESPONSE");
 			if (provider_result) {
-				p = result_list[2]; // result list[2]
+				p = result_list[2]; /* result list[2] */
 				if (!p) {
 					LOGE("Invalid Bundle: insert row_id is null");
 					return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -319,7 +319,7 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 
 	cursor->resultset_col_count = column_count;
 	LOGI("column_count : %d", column_count);
-	// no data check.
+	/* no data check. */
 	if (column_count == DATACONTROL_RESULT_NO_DATA) {
 		LOGE("No result");
 		return DATACONTROL_ERROR_NONE;
@@ -591,7 +591,7 @@ error:
 	if (buf)
 		free(buf);
 
-	if(((sql_response_cb_s *)data) != NULL) {
+	if (((sql_response_cb_s *)data) != NULL) {
 		LOGE("g_hash_table_remove");
 		g_hash_table_remove(__socket_pair_hash, ((sql_response_cb_s *)data)->provider_id);
 
@@ -599,7 +599,7 @@ error:
 		g_hash_table_remove(__socket_pair_hash, sql_dc->provider_id);
 
 		GList *itr = g_list_first(sql_dc->request_info_list);
-		while(itr != NULL) {
+		while (itr != NULL) {
 			datacontrol_consumer_request_info *request_info = (datacontrol_consumer_request_info *)itr->data;
 			__sql_call_cb(sql_dc->provider_id, request_info->request_id, request_info->type, sql_dc->data_id, false,
 					"provider IO Error", -1, NULL, data);
@@ -645,7 +645,7 @@ int __datacontrol_send_sql_async(int sockfd, bundle *kb, bundle *extra_kb, datac
 
 	total_len =  sizeof(datalen) + datalen + sizeof(extra_datalen) + extra_datalen;
 
-	// encoded bundle + encoded bundle size
+	/* encoded bundle + encoded bundle size */
 	buf = (char *)calloc(total_len, sizeof(char));
 	if (buf == NULL) {
 		bundle_free_encoded_rawdata(&kb_data);
@@ -656,7 +656,7 @@ int __datacontrol_send_sql_async(int sockfd, bundle *kb, bundle *extra_kb, datac
 	memcpy(buf, &datalen, sizeof(datalen));
 	memcpy(buf + sizeof(datalen), kb_data, datalen);
 
-	if(extra_datalen > 0) {
+	if (extra_datalen > 0) {
 		memcpy(buf + sizeof(datalen) + datalen, &extra_datalen, sizeof(extra_datalen));
 		memcpy(buf + sizeof(datalen) + datalen + sizeof(extra_datalen), extra_kb_data, extra_datalen);
 	}
@@ -1044,7 +1044,7 @@ int datacontrol_sql_insert(datacontrol_h provider, const bundle *insert_data, in
 
 	int ret = 0;
 
-	// Check size of arguments
+	/* Check size of arguments */
 	long long arg_size = 0;
 	bundle_foreach((bundle *)insert_data, bundle_foreach_check_arg_size_cb, &arg_size);
 	arg_size += strlen(provider->data_id) * sizeof(wchar_t);
@@ -1077,7 +1077,7 @@ int datacontrol_sql_insert(datacontrol_h provider, const bundle *insert_data, in
 
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 2);
 
-	// Set the request id
+	/* Set the request id */
 	*request_id = _datacontrol_create_request_id();
 	LOGI("request id : %d", *request_id);
 
@@ -1113,7 +1113,7 @@ int datacontrol_sql_delete(datacontrol_h provider, const char *where, int *reque
 
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 2);
 
-	// Set the request id
+	/* Set the request id */
 	int reqId = _datacontrol_create_request_id();
 	*request_id = reqId;
 
@@ -1175,7 +1175,7 @@ int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list,
 
 	LOGI("total arg count %d", total_arg_count);
 
-	arg_list[0] = provider->data_id; // arg[0]: data ID
+	arg_list[0] = provider->data_id; /* arg[0]: data ID */
 	int i = 1;
 	if (column_list) {
 		char select_column_count[MAX_LEN_DATACONTROL_COLUMN_COUNT] = {0, };
@@ -1188,7 +1188,7 @@ int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list,
 		}
 
 
-		arg_list[i] = select_column_count; // arg[1]: selected column count
+		arg_list[i] = select_column_count; /* arg[1]: selected column count */
 
 		++i;
 		int select_col = 0;
@@ -1198,19 +1198,19 @@ int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list,
 	} else
 		arg_list[i++] = DATACONTROL_EMPTY;
 
-	if (where)	// arg: where clause
+	if (where)	/* arg: where clause */
 		arg_list[i++] = where;
 	else
 		arg_list[i++] = DATACONTROL_EMPTY;
 
-	if (order)// arg: order clause
+	if (order) /* arg: order clause */
 		arg_list[i++] = order;
 	else
 		arg_list[i++] = DATACONTROL_EMPTY;
 
-	arg_list[i++] = page;  // arg: page number
+	arg_list[i++] = page;  /* arg: page number */
 
-	arg_list[i] = count_per_page_no;  // arg: count per page
+	arg_list[i] = count_per_page_no;  /* arg: count per page */
 
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, total_arg_count);
 	free(arg_list);
@@ -1234,7 +1234,7 @@ int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, co
 
 	int ret = 0;
 
-	// Check size of arguments
+	/* Check size of arguments */
 	long long arg_size = 0;
 	bundle_foreach((bundle *)update_data, bundle_foreach_check_arg_size_cb, &arg_size);
 	arg_size += strlen(provider->data_id) * sizeof(wchar_t);
@@ -1262,7 +1262,7 @@ int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, co
 	}
 
 	const char *arg_list[4];
-	arg_list[0] = provider->data_id; // list(0): data ID
+	arg_list[0] = provider->data_id; /* list(0): data ID */
 	arg_list[1] = update_column_count;
 	arg_list[2] = where;
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 3);

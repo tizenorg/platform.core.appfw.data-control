@@ -34,11 +34,12 @@
 
 #define LOG_TAG "CAPI_APPFW_DATA_CONTROL"
 
-#define _LOGE(fmt, arg...) LOGE(fmt,##arg)
+#define _LOGE(fmt, arg...) LOGE(fmt, ##arg)
 #define _LOGD(fmt, arg...) LOGD(fmt, ##arg)
 
 
-int datacontrol_check_privilege(privilege_type check_type) {
+int datacontrol_check_privilege(privilege_type check_type)
+{
 
 	cynara *p_cynara;
 
@@ -50,9 +51,8 @@ int datacontrol_check_privilege(privilege_type check_type) {
 
 	static bool checked_privilege = FALSE;
 
-	if (checked_privilege) {
+	if (checked_privilege)
 		return DATA_CONTROL_ERROR_NONE;
-	}
 
 	ret = cynara_initialize(&p_cynara, NULL);
 	if (ret != CYNARA_API_SUCCESS) {
@@ -109,40 +109,40 @@ out:
 static const char *data_control_error_to_string(data_control_error_e error)
 {
 	switch (error) {
-		case DATA_CONTROL_ERROR_NONE:
-			return "NONE";
-		case DATA_CONTROL_ERROR_INVALID_PARAMETER:
-			return "INVALID_PARAMETER";
-		case DATA_CONTROL_ERROR_OUT_OF_MEMORY:
-			return "OUT_OF_MEMORY";
-		case DATA_CONTROL_ERROR_IO_ERROR:
-			return "IO_ERROR";
-		case DATA_CONTROL_ERROR_PERMISSION_DENIED:
-			return "PERMISSION_DENIED";
-		case DATA_CONTROL_ERROR_MAX_EXCEEDED:
-			return "Too long argument";
-		default:
-			return "UNKNOWN";
+	case DATA_CONTROL_ERROR_NONE:
+		return "NONE";
+	case DATA_CONTROL_ERROR_INVALID_PARAMETER:
+		return "INVALID_PARAMETER";
+	case DATA_CONTROL_ERROR_OUT_OF_MEMORY:
+		return "OUT_OF_MEMORY";
+	case DATA_CONTROL_ERROR_IO_ERROR:
+		return "IO_ERROR";
+	case DATA_CONTROL_ERROR_PERMISSION_DENIED:
+		return "PERMISSION_DENIED";
+	case DATA_CONTROL_ERROR_MAX_EXCEEDED:
+		return "Too long argument";
+	default:
+		return "UNKNOWN";
 	}
 }
 
 int convert_to_tizen_error(datacontrol_error_e error)
 {
 	switch (error) {
-		case DATACONTROL_ERROR_NONE:
-			return DATA_CONTROL_ERROR_NONE;
-		case DATACONTROL_ERROR_INVALID_PARAMETER:
-			return DATA_CONTROL_ERROR_INVALID_PARAMETER;
-		case DATACONTROL_ERROR_OUT_OF_MEMORY:
-			return DATA_CONTROL_ERROR_OUT_OF_MEMORY;
-		case DATACONTROL_ERROR_IO_ERROR:
-			return DATA_CONTROL_ERROR_IO_ERROR;
-		case DATACONTROL_ERROR_PERMISSION_DENIED:
-			return DATA_CONTROL_ERROR_PERMISSION_DENIED;
-		case DATACONTROL_ERROR_MAX_EXCEEDED:
-			return DATA_CONTROL_ERROR_MAX_EXCEEDED;
-		default:
-			return error;
+	case DATACONTROL_ERROR_NONE:
+		return DATA_CONTROL_ERROR_NONE;
+	case DATACONTROL_ERROR_INVALID_PARAMETER:
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+	case DATACONTROL_ERROR_OUT_OF_MEMORY:
+		return DATA_CONTROL_ERROR_OUT_OF_MEMORY;
+	case DATACONTROL_ERROR_IO_ERROR:
+		return DATA_CONTROL_ERROR_IO_ERROR;
+	case DATACONTROL_ERROR_PERMISSION_DENIED:
+		return DATA_CONTROL_ERROR_PERMISSION_DENIED;
+	case DATACONTROL_ERROR_MAX_EXCEEDED:
+		return DATA_CONTROL_ERROR_MAX_EXCEEDED;
+	default:
+		return error;
 	}
 }
 

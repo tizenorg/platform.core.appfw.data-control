@@ -240,7 +240,7 @@ int _request_appsvc_run(const char *caller_id, const char *callee_id)
 	bundle_add_str(arg_list, AUL_K_NO_CANCEL, "1");
 	LOGI("caller_id %s, callee_id %s", caller_id, callee_id);
 
-	// For DataControl CAPI
+	/* For DataControl CAPI */
 	bundle_add_str(arg_list, AUL_K_DATA_CONTROL_TYPE, "CORE");
 
 	do {

@@ -34,7 +34,7 @@ typedef struct {
 } map_response_cb_s;
 
 static void *datacontrol_map_tree_root = NULL;
-static const int MAX_ARGUMENT_SIZE = 16384; // 16KB
+static const int MAX_ARGUMENT_SIZE = 16384; /* 16KB */
 static GHashTable *__socket_pair_hash = NULL;
 
 static void __map_call_cb(const char *provider_id, int request_id, datacontrol_request_type type,
@@ -226,14 +226,14 @@ static int __map_handle_cb(int fd, bundle *b, int request_type, appsvc_result_va
 
 	__remove_map_request_info(request_id, map_dc);
 
-	// result list
+	/* result list */
 	result_list = bundle_get_str_array(b, OSP_K_ARG, &result_list_len);
 	if (!result_list) {
 		LOGE("Invalid Bundle: arguement list is null");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	p = result_list[0]; // result list[0] = provider_result
+	p = result_list[0]; /* result list[0] = provider_result */
 	if (!p) {
 		LOGE("Invalid Bundle: provider_result is null");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -243,7 +243,7 @@ static int __map_handle_cb(int fd, bundle *b, int request_type, appsvc_result_va
 
 	provider_result = atoi(p);
 
-	error_message = result_list[1]; // result list[1] = error
+	error_message = result_list[1]; /* result list[1] = error */
 	if (!error_message) {
 		LOGE("Invalid Bundle: error_message is null");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -319,7 +319,7 @@ static int __datacontrol_send_map_async(int sockfd, bundle *kb, datacontrol_requ
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	// encoded bundle + encoded bundle size
+	/* encoded bundle + encoded bundle size */
 	buf = (char *)calloc(datalen + sizeof(datalen), sizeof(char));
 	if (buf == NULL) {
 		LOGE("Malloc failed!!");
@@ -553,7 +553,7 @@ static int __map_request_provider(datacontrol_h provider, datacontrol_request_ty
 
 		if (socket_info == NULL) {
 			ret = _request_appsvc_run(caller_app_id, app_id);
-			if(ret != DATACONTROL_ERROR_NONE)
+			if (ret != DATACONTROL_ERROR_NONE)
 				return ret;
 
 			socket_info = _get_socket_info(caller_app_id, app_id, "consumer", __recv_map_message, data);
@@ -565,7 +565,7 @@ static int __map_request_provider(datacontrol_h provider, datacontrol_request_ty
 
 		LOGI("send data from consumer !!!");
 		ret = __datacontrol_send_map_async(socket_info->socket_fd, request_data, type, NULL);
-		if(ret != DATACONTROL_ERROR_NONE)
+		if (ret != DATACONTROL_ERROR_NONE)
 			g_hash_table_remove(__socket_pair_hash, provider->provider_id);
 		else
 			break;
@@ -839,7 +839,7 @@ int datacontrol_map_get_with_page(datacontrol_h provider, const char *key, int *
 
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 4);
 
-	// Set the request id
+	/* Set the request id */
 	int reqId = _datacontrol_create_request_id();
 	*request_id = reqId;
 
@@ -881,7 +881,7 @@ int datacontrol_map_set(datacontrol_h provider, const char *key, const char *old
 
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 4);
 
-	// Set the request id
+	/* Set the request id */
 	int reqId = _datacontrol_create_request_id();
 	*request_id = reqId;
 
@@ -922,7 +922,7 @@ int datacontrol_map_add(datacontrol_h provider, const char *key, const char *val
 
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 3);
 
-	// Set the request id
+	/* Set the request id */
 	int reqId = _datacontrol_create_request_id();
 	*request_id = reqId;
 
@@ -963,7 +963,7 @@ int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *
 
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 3);
 
-	// Set the request id
+	/* Set the request id */
 	int reqId = _datacontrol_create_request_id();
 	*request_id = reqId;
 

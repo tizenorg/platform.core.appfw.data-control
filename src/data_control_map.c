@@ -33,9 +33,7 @@ __map_get_response(int request_id, datacontrol_h provider,
 
 	data_control_map_response_cb *callback = (data_control_map_response_cb*)g_hash_table_lookup(response_table, provider->provider_id);
 	if (callback)
-	{
 		callback->get_cb(request_id, (data_control_h)provider, result_value_list, result_value_count, provider_result, error, user_data);
-	}
 }
 
 void
@@ -45,9 +43,7 @@ __map_set_response(int request_id, datacontrol_h provider, bool provider_result,
 
 	data_control_map_response_cb *callback = (data_control_map_response_cb*)g_hash_table_lookup(response_table, provider->provider_id);
 	if (callback)
-	{
 		callback->set_cb(request_id, (data_control_h)provider, provider_result, error, user_data);
-	}
 }
 
 void
@@ -57,9 +53,7 @@ __map_add_response(int request_id, datacontrol_h provider, bool provider_result,
 
 	data_control_map_response_cb *callback = (data_control_map_response_cb*)g_hash_table_lookup(response_table, provider->provider_id);
 	if (callback)
-	{
 		callback->add_cb(request_id, (data_control_h)provider, provider_result, error, user_data);
-	}
 }
 
 void
@@ -69,16 +63,13 @@ __map_remove_response(int request_id, datacontrol_h provider, bool provider_resu
 
 	data_control_map_response_cb *callback = (data_control_map_response_cb*)g_hash_table_lookup(response_table, provider->provider_id);
 	if (callback)
-	{
 		callback->remove_cb(request_id, (data_control_h)provider, provider_result, error, user_data);
-	}
 }
 
 static void
 __free_data(gpointer data)
 {
-	if (data)
-	{
+	if (data) {
 		g_free(data);
 		data = NULL;
 	}
@@ -136,25 +127,18 @@ data_control_map_register_response_cb(data_control_h provider, data_control_map_
 {
 
 	if (response_table == NULL)
-	{
 		__initialize();
-	}
 
 	if (callback == NULL)
-	{
 		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
-	}
 
 	char *id = strdup(provider->provider_id);
 	if (id == NULL)
-	{
 		return DATA_CONTROL_ERROR_OUT_OF_MEMORY;
-	}
 
 	data_control_map_response_cb *cb
 		= (data_control_map_response_cb *)malloc(sizeof(data_control_map_response_cb));
-	if (cb == NULL)
-	{
+	if (cb == NULL) {
 		free(id);
 		return DATA_CONTROL_ERROR_OUT_OF_MEMORY;
 	}
@@ -169,9 +153,7 @@ EXPORT_API int
 data_control_map_unregister_response_cb(data_control_h provider)
 {
 	if (provider->provider_id)
-	{
 		g_hash_table_remove(response_table, provider->provider_id);
-	}
 
 	return convert_to_tizen_error(datacontrol_map_unregister_response_cb((datacontrol_h)provider));
 }
