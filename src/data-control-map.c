@@ -13,6 +13,7 @@
 #include <appsvc/appsvc.h>
 #include <aul/aul.h>
 #include <bundle.h>
+#include <bundle_internal.h>
 #include <pkgmgr-info.h>
 
 #include "data-control-map.h"
