@@ -375,22 +375,20 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 		}
 		if (_read_socket(fd, (char *)column_name, column_name_len, &nb) != DATACONTROL_ERROR_NONE) {
 			LOGE("read socket fail: column_name");
-			free(column_name);
 			retval = DATACONTROL_ERROR_IO_ERROR;
 			goto out;
 		}
 
-		column_name[column_name_len - 1] = '\0';
 		LOGE("column_name read : %d", nb);
 		LOGE("column_name : %s", column_name);
 		if (write(result_fd, column_name, column_name_len) == -1) {
 			LOGE("Writing a column_type to a file descriptor is failed. errno = %d", errno);
 			retval = DATACONTROL_ERROR_IO_ERROR;
-			free(column_name);
 			goto out;
 		}
 
 		free(column_name);
+		column_name = NULL;
 
 	}
 
@@ -414,8 +412,8 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 		goto out;
 	}
 
-	LOGE("row_count : %d", row_count);
-	if (write(result_fd, &row_count, sizeof(int)) == -1) {
+	LOGE("row_count : %lld", row_count);
+	if (write(result_fd, &row_count, sizeof(row_count)) == -1) {
 		LOGE("Writing a row_count to a file descriptor is failed. errno = %d", errno);
 		retval = DATACONTROL_ERROR_IO_ERROR;
 		goto out;
@@ -472,19 +470,18 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 
 				if (_read_socket(fd, (char *)value, size, &nb) != DATACONTROL_ERROR_NONE) {
 					LOGE("read socket fail: value");
-					free(value);
 					retval = DATACONTROL_ERROR_IO_ERROR;
 					goto out;
 				}
 				LOGE("value : %s", value);
 				if (write(result_fd, value, sizeof(void) * size) == -1) {
 					LOGE("Writing a value to a file descriptor is failed. errno = %d", errno);
-					free(value);
 					retval = DATACONTROL_ERROR_IO_ERROR;
 					goto out;
 				}
 
 				free(value);
+				value = NULL;
 
 			}
 			row_offset += sizeof(int) * 2 + size;
@@ -559,8 +556,10 @@ static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 
 			kb = bundle_decode_raw((bundle_raw *)buf, data_len);
 			LOGE("__consumer_recv_sql_message: ...from %d: OK\n", fd);
-			if (buf)
+			if (buf) {
 				free(buf);
+				buf = NULL;
+			}
 
 			p = bundle_get_val(kb, OSP_K_DATACONTROL_REQUEST_TYPE);
 			if (!p) {
@@ -1269,7 +1268,7 @@ int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, co
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 3);
 
 	*request_id = _datacontrol_create_request_id();
-	__sql_request_provider(provider, DATACONTROL_TYPE_SQL_UPDATE, b, (bundle *)update_data, *request_id);
+	ret = __sql_request_provider(provider, DATACONTROL_TYPE_SQL_UPDATE, b, (bundle *)update_data, *request_id);
 
 	bundle_free(b);
 	return ret;

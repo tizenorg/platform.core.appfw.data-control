@@ -168,7 +168,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 			LOGI("sqlite3_column_name is failed. errno = %d", errno);
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
 		} else {
-			int column_name_len = strlen(column_name);
+			int column_name_len = strlen(column_name) + 1;
 			if (_write_socket(fd, &column_name_len, sizeof(int), &nb) != DATACONTROL_ERROR_NONE) {
 				LOGI("Writing a column_name_len to a file descriptor is failed. errno = %d", errno);
 				return DATACONTROL_ERROR_IO_ERROR;
@@ -234,7 +234,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 		LOGI("Writing a row_count to a file descriptor is failed. errno = %d", errno);
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
-	LOGI("Writing a row_count %d", row_count);
+	LOGI("Writing a row_count %lld", row_count);
 
 	row_count = 0;
 	offset_idx = 0;
@@ -292,7 +292,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 					break;
 				}
 
-				if (value == NULL)
+				if (value == NULL && type != 5)
 					return DATACONTROL_ERROR_IO_ERROR;
 
 				buf_len = sizeof(int) * 2 + size;
