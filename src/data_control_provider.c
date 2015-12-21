@@ -251,7 +251,7 @@ EXPORT_API char *data_control_provider_create_insert_statement(data_control_h pr
 
 	_LOGI("SQL statement length: %d", sql_len);
 
-	char* sql = (char *) calloc(sql_len, sizeof(char));
+	char* sql = (char *)calloc(sql_len, sizeof(char));
 	if (sql == NULL) {
 		free(data_id);
 		free(cols->keys);
@@ -262,24 +262,24 @@ EXPORT_API char *data_control_provider_create_insert_statement(data_control_h pr
 	}
 	memset(sql, 0, sql_len);
 
-	sprintf(sql, "INSERT INTO %s (", data_id);
+	snprintf(sql, sql_len, "INSERT INTO %s (", data_id);
 	free(data_id);
 
 	for (index = 0; index < row_count - 1; index++) {
-		strcat(sql, cols->keys[index]);
-		strcat(sql, ", ");
+		strncat(sql, cols->keys[index], sql_len - (strlen(sql) + 1));
+		strncat(sql, ", ", sql_len - (strlen(sql) + 1));
 	}
 
-	strcat(sql, cols->keys[index]);
-	strcat(sql, ") VALUES (");
+	strncat(sql, cols->keys[index], sql_len - (strlen(sql) + 1));
+	strncat(sql, ") VALUES (", sql_len - (strlen(sql) + 1));
 
 	for (index = 0; index < row_count - 1; index++) {
-		strcat(sql, cols->vals[index]);
-		strcat(sql, ", ");
+		strncat(sql, cols->vals[index], sql_len - (strlen(sql) + 1));
+		strncat(sql, ", ", sql_len - (strlen(sql) + 1));
 	}
 
-	strcat(sql, cols->vals[index]);
-	strcat(sql, ")");
+	strncat(sql, cols->vals[index], sql_len - (strlen(sql) + 1));
+	strncat(sql, ")", sql_len - (strlen(sql) + 1));
 
 	_LOGI("SQL statement is: %s", sql);
 
@@ -310,7 +310,7 @@ EXPORT_API char *data_control_provider_create_delete_statement(data_control_h pr
 
 	_LOGI("SQL statement length: %d", sql_len);
 
-	char *sql = (char *) calloc(sql_len, sizeof(char));
+	char *sql = (char *)calloc(sql_len, sizeof(char));
 	if (sql == NULL) {
 		free(data_id);
 		set_last_result(DATA_CONTROL_ERROR_OUT_OF_MEMORY);
@@ -318,10 +318,10 @@ EXPORT_API char *data_control_provider_create_delete_statement(data_control_h pr
 	}
 	memset(sql, 0, sql_len);
 
-	sprintf(sql, "DELETE FROM %s", data_id);
+	snprintf(sql, sql_len, "DELETE FROM %s", data_id);
 	if (where) {
-		strcat(sql, " WHERE ");
-		strcat(sql, where);
+		strncat(sql, " WHERE ", sql_len - (strlen(sql) + 1));
+		strncat(sql, where, sql_len - (strlen(sql) + 1));
 	}
 
 	_LOGI("SQL statement is: %s", sql);
@@ -382,23 +382,23 @@ EXPORT_API char *data_control_provider_create_update_statement(data_control_h pr
 	}
 	memset(sql, 0, sql_len);
 
-	sprintf(sql, "UPDATE %s SET ", data_id);
+	snprintf(sql, sql_len, "UPDATE %s SET ", data_id);
 	free(data_id);
 
 	for (index = 0; index < row_count - 1; index++) {
-		strcat(sql, cols->keys[index]);
-		strcat(sql, " = ");
-		strcat(sql, cols->vals[index]);
-		strcat(sql, ", ");
+		strncat(sql, cols->keys[index], sql_len - (strlen(sql) + 1));
+		strncat(sql, " = ", sql_len - (strlen(sql) + 1));
+		strncat(sql, cols->vals[index], sql_len - (strlen(sql) + 1));
+		strncat(sql, ", ", sql_len - (strlen(sql) + 1));
 	}
 
-	strcat(sql, cols->keys[index]);
-	strcat(sql, " = ");
-	strcat(sql, cols->vals[index]);
+	strncat(sql, cols->keys[index], sql_len - (strlen(sql) + 1));
+	strncat(sql, " = ", sql_len - (strlen(sql) + 1));
+	strncat(sql, cols->vals[index], sql_len - (strlen(sql) + 1));
 
 	if (where) {
-		strcat(sql, " WHERE ");
-		strcat(sql, where);
+		strncat(sql, " WHERE ", sql_len - (strlen(sql) + 1));
+		strncat(sql, where, sql_len - (strlen(sql) + 1));
 	}
 
 	_LOGI("SQL statement is: %s", sql);
@@ -451,27 +451,27 @@ EXPORT_API char *data_control_provider_create_select_statement(data_control_h pr
 	}
 	memset(sql, 0, sql_len);
 
-	strcpy(sql, "SELECT ");
+	strncpy(sql, "SELECT ", sql_len);
 	if (!column_list) {
-		strcat(sql, "*");
+		strncat(sql, "*", sql_len - (strlen(sql) + 1));
 	} else {
 		for (index = 0; index < column_count - 1; index++) {
-			strcat(sql, column_list[index]);
-			strcat(sql, ", ");
+			strncat(sql, column_list[index], sql_len - (strlen(sql) + 1));
+			strncat(sql, ", ", sql_len - (strlen(sql) + 1));
 		}
-		strcat(sql, column_list[index]);
+		strncat(sql, column_list[index], sql_len - (strlen(sql) + 1));
 	}
 
-	strcat(sql, " FROM ");
-	strcat(sql, data_id);
+	strncat(sql, " FROM ", sql_len - (strlen(sql) + 1));
+	strncat(sql, data_id, sql_len - (strlen(sql) + 1));
 
 	if (where) {
-		strcat(sql, " WHERE ");
-		strcat(sql, where);
+		strncat(sql, " WHERE ", sql_len - (strlen(sql) + 1));
+		strncat(sql, where, sql_len - (strlen(sql) + 1));
 	}
 	if (order) {
-		strcat(sql, " ORDER BY ");
-		strcat(sql, order);
+		strncat(sql, " ORDER BY ", sql_len - (strlen(sql) + 1));
+		strncat(sql, order, sql_len - (strlen(sql) + 1));
 	}
 
 	_LOGI("SQL statement is: %s", sql);

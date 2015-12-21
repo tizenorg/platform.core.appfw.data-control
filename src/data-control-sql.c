@@ -309,7 +309,8 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 	cursor->resultset_path = strdup(select_map_file);
 	if (cursor->resultset_path == NULL) {
 		LOGE("Out of memory. can not dup select map file.");
-		return DATACONTROL_ERROR_IO_ERROR;
+		retval = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
 	}
 	cursor->resultset_fd = result_fd;
 	if (_read_socket(fd, (char *)&column_count, sizeof(column_count), &nb) != DATACONTROL_ERROR_NONE) {
@@ -323,6 +324,7 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 	/* no data check. */
 	if (column_count == DATACONTROL_RESULT_NO_DATA) {
 		LOGE("No result");
+		close(result_fd);
 		return DATACONTROL_ERROR_NONE;
 	}
 
@@ -490,9 +492,12 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 		if (i + 1 < row_count)
 			cursor->row_offset_list[i + 1] = cursor->row_offset_list[i] + row_offset;
 	}
+	close(result_fd);
 	return retval;
 
 out:
+	if (result_fd != -1)
+		close(result_fd);
 	if (column_name)
 		free(column_name);
 	if (value)
@@ -1195,8 +1200,7 @@ int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list,
 		while (select_col < column_count)
 			arg_list[i++] = column_list[select_col++];
 
-	} else
-		arg_list[i++] = DATACONTROL_EMPTY;
+	}
 
 	if (where)	/* arg: where clause */
 		arg_list[i++] = where;
