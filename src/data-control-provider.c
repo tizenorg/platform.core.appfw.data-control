@@ -434,9 +434,19 @@ static bundle *__get_data_sql(int fd)
 		char *buf = (char *)calloc(len, sizeof(char));
 		if (buf == NULL) {
 			LOGE("calloc fail");
+			if (b)
+				bundle_free(b);
 			return NULL;
 		}
 		ret = read(fd, buf, len);
+		if (ret < len) {
+			LOGE("read error :%d", ret);
+			if (b)
+				bundle_free(b);
+			if (buf)
+				free(buf);
+			return NULL;
+		}
 		b = bundle_decode_raw((bundle_raw *)buf, len);
 
 		if (buf)
@@ -573,11 +583,16 @@ static int __send_result(bundle *b, datacontrol_request_type type, void *data)
 
 	datacontrol_socket_info *socket_info;
 	char *caller_app_id = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
+	int ret = DATACONTROL_ERROR_NONE;
 
 	LOGI("__datacontrol_send_async caller_app_id : %s ", caller_app_id);
 
 	socket_info = g_hash_table_lookup(__socket_pair_hash, caller_app_id);
-	int ret = __datacontrol_send_async(socket_info->socket_fd, b, type, data);
+	if (socket_info == NULL) {
+		LOGE("__socket_pair_hash lookup fail");
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+	ret = __datacontrol_send_async(socket_info->socket_fd, b, type, data);
 
 	LOGI("__datacontrol_send_async result : %d ", ret);
 
@@ -591,6 +606,14 @@ static int __send_result(bundle *b, datacontrol_request_type type, void *data)
 
 int __provider_process(bundle *b, int fd)
 {
+	int len = 0;
+	const char **arg_list = NULL;
+	const char **column_list = NULL;
+	datacontrol_h provider = NULL;
+	int provider_req_id = 0;
+	int *key = NULL;
+	bundle *value = NULL;
+
 	const char *request_type = bundle_get_val(b, OSP_K_DATACONTROL_REQUEST_TYPE);
 	if (request_type == NULL) {
 		LOGE("Invalid data control request");
@@ -616,10 +639,9 @@ int __provider_process(bundle *b, int fd)
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	int len = 0;
-	const char **arg_list = bundle_get_str_array(b, OSP_K_ARG, &len);
+	arg_list = bundle_get_str_array(b, OSP_K_ARG, &len);
 
-	datacontrol_h provider = malloc(sizeof(struct datacontrol_s));
+	provider = malloc(sizeof(struct datacontrol_s));
 	if (provider == NULL) {
 		LOGE("Out of memory. fail to alloc provider.");
 		return DATACONTROL_ERROR_IO_ERROR;
@@ -632,22 +654,22 @@ int __provider_process(bundle *b, int fd)
 	provider->data_id = (char *)arg_list[PACKET_INDEX_DATAID];
 
 	/* Set the request ID */
-	int provider_req_id = __provider_new_request_id();
+	provider_req_id = __provider_new_request_id();
 
 	LOGI("Provider ID: %s, data ID: %s, request type: %s", provider->provider_id, provider->data_id, request_type);
 
 	/* Add the data to the table */
-	int *key = malloc(sizeof(int));
+	key = malloc(sizeof(int));
 	if (key == NULL) {
 		LOGE("Out of memory. fail to malloc key");
-		return DATACONTROL_ERROR_IO_ERROR;
+		goto err;
 	}
 	*key = provider_req_id;
 
-	bundle *value = bundle_dup(b);
+	value = bundle_dup(b);
 	if (value == NULL) {
 		LOGE("Fail to dup value");
-		return DATACONTROL_ERROR_IO_ERROR;
+		goto err;
 	}
 	g_hash_table_insert(__request_table, key, value);
 
@@ -659,10 +681,10 @@ int __provider_process(bundle *b, int fd)
 		int column_count = atoi(arg_list[i++]); /* Column count */
 
 		LOGI("SELECT column count: %d", column_count);
-		const char **column_list = (const char **)malloc(column_count * (sizeof(char *)));
+		column_list = (const char **)malloc(column_count * (sizeof(char *)));
 		if (column_list == NULL) {
 			LOGE("Out of memory. Fail to malloc column_list.");
-			return DATACONTROL_ERROR_IO_ERROR;
+			goto err;
 		}
 
 		while (current < column_count) {
@@ -695,11 +717,13 @@ int __provider_process(bundle *b, int fd)
 	{
 		LOGI("INSERT / UPDATE handler");
 		bundle *sql = __get_data_sql(fd);
-		if (sql == NULL)
-			return DATACONTROL_ERROR_IO_ERROR;
-		if (type == DATACONTROL_TYPE_SQL_INSERT)
+		if (sql == NULL) {
+			LOGE("__get_data_sql fail");
+			goto err;
+		}
+		if (type == DATACONTROL_TYPE_SQL_INSERT) {
 			provider_sql_cb->insert(provider_req_id, provider, sql, provider_sql_user_data);
-		else {
+		} else {
 			const char *where = arg_list[PACKET_INDEX_UPDATEWHERE];
 			LOGI("UPDATE from where: %s", where);
 			if (strncmp(where, DATACONTROL_EMPTY, strlen(DATACONTROL_EMPTY)) == 0)
@@ -761,11 +785,25 @@ int __provider_process(bundle *b, int fd)
 	free(provider);
 
 	return DATACONTROL_ERROR_NONE;
+err:
+
+	if (provider)
+		free(provider);
+	if (key)
+		free(key);
+	if (value)
+		free(value);
+
+	return DATACONTROL_ERROR_IO_ERROR;
 }
 
 gboolean __provider_recv_message(GIOChannel *channel,
 		GIOCondition cond,
 		gpointer data) {
+
+	char *buf = NULL;
+	int data_len;
+	guint nb;
 
 	gint fd = g_io_channel_unix_get_fd(channel);
 	gboolean retval = TRUE;
@@ -780,9 +818,6 @@ gboolean __provider_recv_message(GIOChannel *channel,
 		goto error;
 
 	if (cond & G_IO_IN) {
-		char *buf;
-		int data_len;
-		guint nb;
 
 		if (_read_socket(fd, (char *)&data_len, sizeof(data_len), &nb) != DATACONTROL_ERROR_NONE) {
 			LOGE("read socket fail : data_len");
@@ -800,7 +835,7 @@ gboolean __provider_recv_message(GIOChannel *channel,
 		if (data_len > 0) {
 			bundle *kb = NULL;
 
-			buf = (char *) calloc(data_len + 1, sizeof(char));
+			buf = (char *)calloc(data_len + 1, sizeof(char));
 			if (buf == NULL) {
 				LOGE("calloc failed");
 				goto error;
@@ -813,12 +848,10 @@ gboolean __provider_recv_message(GIOChannel *channel,
 
 			if (nb == 0) {
 				LOGI("__provider_recv_message: nb 0 : EOF\n");
-				free(buf);
 				goto error;
 			}
 
 			kb = bundle_decode_raw((bundle_raw *)buf, data_len);
-			free(buf);
 			if (__provider_process(kb, fd) != DATACONTROL_ERROR_NONE) {
 				bundle_free(kb);
 				goto error;
@@ -826,11 +859,19 @@ gboolean __provider_recv_message(GIOChannel *channel,
 			bundle_free(kb);
 		}
 	}
+	if (buf) {
+		free(buf);
+		buf = NULL;
+	}
 	return retval;
 error:
 	if (((char *)data) != NULL)
 		g_hash_table_remove(__socket_pair_hash, (char *)data);
 
+	if (buf) {
+		free(buf);
+		buf = NULL;
+	}
 	return FALSE;
 }
 
@@ -962,7 +1003,10 @@ int datacontrol_provider_send_select_result(int request_id, void *db_handle)
 	}
 
 	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_SELECT, db_handle);
-	return __send_result(res, DATACONTROL_TYPE_SQL_SELECT, db_handle);
+	int ret =  __send_result(res, DATACONTROL_TYPE_SQL_SELECT, db_handle);
+	g_hash_table_remove(__request_table, &request_id);
+
+	return ret;
 }
 
 int datacontrol_provider_send_insert_result(int request_id, long long row_id)
@@ -980,7 +1024,11 @@ int datacontrol_provider_send_insert_result(int request_id, long long row_id)
 
 	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_INSERT, (void *)&row_id);
 
-	return __send_result(res, DATACONTROL_TYPE_SQL_INSERT, NULL);
+	int ret = __send_result(res, DATACONTROL_TYPE_SQL_INSERT, NULL);
+	g_hash_table_remove(__request_table, &request_id);
+
+	return ret;
+
 }
 
 int datacontrol_provider_send_update_result(int request_id)
@@ -998,7 +1046,11 @@ int datacontrol_provider_send_update_result(int request_id)
 
 	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_UPDATE, NULL);
 
-	return __send_result(res, DATACONTROL_TYPE_SQL_UPDATE, NULL);
+	int ret = __send_result(res, DATACONTROL_TYPE_SQL_UPDATE, NULL);
+	g_hash_table_remove(__request_table, &request_id);
+
+	return ret;
+
 }
 
 int datacontrol_provider_send_delete_result(int request_id)
@@ -1016,7 +1068,10 @@ int datacontrol_provider_send_delete_result(int request_id)
 
 	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_DELETE, NULL);
 
-	return __send_result(res, DATACONTROL_TYPE_SQL_DELETE, NULL);
+	int ret = __send_result(res, DATACONTROL_TYPE_SQL_DELETE, NULL);
+	g_hash_table_remove(__request_table, &request_id);
+
+	return ret;
 }
 
 int datacontrol_provider_send_error(int request_id, const char *error)
@@ -1052,7 +1107,11 @@ int datacontrol_provider_send_map_result(int request_id)
 
 	bundle *res = __set_result(b, DATACONTROL_TYPE_UNDEFINED, NULL);
 
-	return __send_result(res, DATACONTROL_TYPE_UNDEFINED, NULL);
+	int ret = __send_result(res, DATACONTROL_TYPE_UNDEFINED, NULL);
+	g_hash_table_remove(__request_table, &request_id);
+
+	return ret;
+
 }
 
 int datacontrol_provider_send_map_get_value_result(int request_id, char **value_list, int value_count)
@@ -1074,5 +1133,9 @@ int datacontrol_provider_send_map_get_value_result(int request_id, char **value_
 
 	bundle *res = __set_result(b, DATACONTROL_TYPE_MAP_GET, value_list);
 
-	return __send_result(res, DATACONTROL_TYPE_MAP_GET, value_list);
+	int ret = __send_result(res, DATACONTROL_TYPE_MAP_GET, value_list);
+	g_hash_table_remove(__request_table, &request_id);
+
+	return ret;
+
 }

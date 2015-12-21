@@ -112,18 +112,20 @@ int _read_socket(int fd,
 char *_datacontrol_create_select_statement(char *data_id, const char **column_list, int column_count,
 		const char *where, const char *order, int page_number, int count_per_page)
 {
+	int remain_buf_size = MAX_COLUMN_SIZE;
 	char *column = calloc(MAX_COLUMN_SIZE, sizeof(char));
 	int i = 0;
 
 	while (i < column_count - 1) {
 		LOGI("column i = %d, %s", i, column_list[i]);
-		strcat(column, column_list[i]);
-		strcat(column, ", ");
+		strncat(column, column_list[i], remain_buf_size);
+		remain_buf_size -= (strlen(column_list[i]) + 1);
+		strncat(column, ", ", remain_buf_size);
+		remain_buf_size -= (strlen(", ") + 1);
 		i++;
 	}
 
-	LOGI("column i = %d, %s", i, column_list[i]);
-	strcat(column, column_list[i]);
+	strncat(column, column_list[i], remain_buf_size);
 
 	char *statement = calloc(MAX_STATEMENT_SIZE, sizeof(char));
 	snprintf(statement, MAX_STATEMENT_SIZE, "SELECT %s * FROM %s WHERE %s ORDER BY %s", column,
