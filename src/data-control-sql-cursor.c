@@ -116,7 +116,14 @@ int datacontrol_sql_get_column_name(resultset_cursor *cursor, int column_index, 
 	char col_name[4096] = {0, };
 	int i = 0;
 	int ret = 0;
-	FILE *fp = fdopen(dup(cursor->resultset_fd), "r");
+	FILE *fp = NULL;
+	int resultset_fd = dup(cursor->resultset_fd);
+	if (resultset_fd < 0) {
+		LOGE("dup failed errno %d : %s \n", errno, strerror(errno));
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+
+	fp = fdopen(resultset_fd, "r");
 	if (fp == NULL) {
 		LOGE("unable to open resultset file: %s", strerror(errno));
 		return DATACONTROL_ERROR_IO_ERROR;
@@ -321,6 +328,11 @@ int datacontrol_sql_get_blob_data(resultset_cursor *cursor, int column_index, vo
 	}
 
 	ret = read(fd, &size, sizeof(int));
+	if (ret == 0) {
+		LOGE("unable to read size in the resultset file: %s", strerror(errno));
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+
 	if (size > data_size) {
 		LOGE("size is more than the size requested");
 		return DATACONTROL_ERROR_MAX_EXCEEDED; /* overflow */

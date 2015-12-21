@@ -117,13 +117,12 @@ char *_datacontrol_create_select_statement(char *data_id, const char **column_li
 
 	while (i < column_count - 1) {
 		LOGI("column i = %d, %s", i, column_list[i]);
-		strcat(column, column_list[i]);
-		strcat(column, ", ");
+		strncat(column, column_list[i], MAX_COLUMN_SIZE - (strlen(column) + 1));
+		strncat(column, ", ", MAX_COLUMN_SIZE - (strlen(column) + 1));
 		i++;
 	}
 
-	LOGI("column i = %d, %s", i, column_list[i]);
-	strcat(column, column_list[i]);
+	strncat(column, column_list[i], MAX_COLUMN_SIZE - (strlen(column) + 1));
 
 	char *statement = calloc(MAX_STATEMENT_SIZE, sizeof(char));
 	snprintf(statement, MAX_STATEMENT_SIZE, "SELECT %s * FROM %s WHERE %s ORDER BY %s", column,
