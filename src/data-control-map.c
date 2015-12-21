@@ -799,9 +799,9 @@ int datacontrol_map_get_with_page(datacontrol_h provider, const char *key, int *
 
 	LOGI("Gets the value list from provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
-	long long arg_size = (strlen(provider->data_id) + strlen(key)) * sizeof(wchar_t);
+	unsigned int arg_size = (strlen(provider->data_id) + strlen(key)) * sizeof(wchar_t);
 	if (arg_size > MAX_ARGUMENT_SIZE) {
-		LOGE("The size of sending argument (%lld) exceeds the maximum limit.", arg_size);
+		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
 
@@ -859,9 +859,9 @@ int datacontrol_map_set(datacontrol_h provider, const char *key, const char *old
 
 	LOGI("Sets the old value to new value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
-	long long arg_size = (strlen(provider->data_id) + strlen(key) + strlen(old_value) + strlen(new_value)) * sizeof(wchar_t);
+	unsigned int arg_size = (strlen(provider->data_id) + strlen(key) + strlen(old_value) + strlen(new_value)) * sizeof(wchar_t);
 	if (arg_size > MAX_ARGUMENT_SIZE) {
-		LOGE("The size of sending argument (%lld) exceeds the maximum limit.", arg_size);
+		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
 
@@ -901,9 +901,9 @@ int datacontrol_map_add(datacontrol_h provider, const char *key, const char *val
 
 	LOGI("Adds the value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
-	long long arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
+	unsigned int arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
 	if (arg_size > MAX_ARGUMENT_SIZE) {
-		LOGE("The size of sending argument (%lld) exceeds the maximum limit.", arg_size);
+		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
 
@@ -942,9 +942,9 @@ int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *
 
 	LOGI("Removes the value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
-	long long arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
+	unsigned int arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
 	if (arg_size > MAX_ARGUMENT_SIZE) {
-		LOGE("The size of sending argument (%lld) exceeds the maximum limit.", arg_size);
+		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
 
