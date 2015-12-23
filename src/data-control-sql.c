@@ -492,7 +492,7 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 		if (i + 1 < row_count)
 			cursor->row_offset_list[i + 1] = cursor->row_offset_list[i] + row_offset;
 	}
-	close(result_fd);
+
 	return retval;
 
 out:
