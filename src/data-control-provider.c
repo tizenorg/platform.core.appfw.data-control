@@ -470,8 +470,9 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 		strncpy(type_str, request_type, MAX_LEN_DATACONTROL_REQ_TYPE);
 		LOGI("type is %s", type_str);
 
-	} else
+	} else {
 		snprintf(type_str, MAX_LEN_DATACONTROL_REQ_TYPE, "%d", (int)type);
+	}
 
 	bundle_add_str(res, OSP_K_DATACONTROL_REQUEST_TYPE, type_str);
 

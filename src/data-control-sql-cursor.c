@@ -113,43 +113,47 @@ int datacontrol_sql_get_column_count(resultset_cursor *cursor)
 
 int datacontrol_sql_get_column_name(resultset_cursor *cursor, int column_index, char *name)
 {
-	char col_name[4096] = {0, };
+	char *col_name = NULL;
 	int i = 0;
 	int ret = 0;
-	FILE *fp = NULL;
-	int resultset_fd = dup(cursor->resultset_fd);
-	if (resultset_fd < 0) {
-		LOGE("dup failed errno %d : %s \n", errno, strerror(errno));
-		return DATACONTROL_ERROR_IO_ERROR;
-	}
+	int column_len = 0;
+	int fd = cursor->resultset_fd;
 
-	fp = fdopen(resultset_fd, "r");
-	if (fp == NULL) {
-		LOGE("unable to open resultset file: %s", strerror(errno));
-		return DATACONTROL_ERROR_IO_ERROR;
-	}
-
-	ret = fseek(fp, cursor->resultset_col_name_offset, SEEK_SET);
+	ret = lseek(fd, cursor->resultset_col_name_offset, SEEK_SET);
 	if (ret < 0) {
-		LOGE("unable to seek in the resultset file: %s", strerror(errno));
-		fclose(fp);
+		LOGE("unable to seek in the resultset file: %d %s", cursor->resultset_current_offset,
+				strerror(errno));
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
 	for (i = 0; i < column_index + 1; i++) {
-		if (!(fgets(col_name, 4096, fp))) {
-			LOGE("unable to read a line in the resultset file: %s", strerror(errno));
-			fclose(fp);
+		ret = read(fd, &column_len, sizeof(int));
+		if (ret == 0) {
+			LOGE("unable to read column_len: %d", column_len);
 			return DATACONTROL_ERROR_IO_ERROR;
 		}
+
+		if (i == column_index) {
+			col_name = (char *)calloc(column_len, sizeof(char));
+			ret = read(fd, col_name, column_len);
+			if (ret == 0) {
+				LOGE("unable to read col_name : %s", strerror(errno));
+				free(col_name);
+				return DATACONTROL_ERROR_IO_ERROR;
+			}
+		} else {
+			ret = lseek(fd, column_len, SEEK_CUR);
+			if (ret < 0) {
+				LOGE("unable to seek in the resultset file: %s", strerror(errno));
+				return DATACONTROL_ERROR_IO_ERROR;
+			}
+		}
 	}
-
-	memset(name, 0, strlen(col_name)); /* To avoid copying newline */
-	memcpy(name, col_name, strlen(col_name) - 1);
-
+	memset(name, 0, column_len);
+	memcpy(name, col_name, column_len);
+	free(col_name);
 	LOGI("The column name is %s", name);
 
-	fclose(fp);
 	return DATACONTROL_ERROR_NONE;
 }
 
