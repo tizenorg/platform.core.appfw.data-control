@@ -43,6 +43,7 @@ typedef struct {
 
 static void *datacontrol_sql_tree_root = NULL;
 static GHashTable *__socket_pair_hash = NULL;
+static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *cursor);
 
 static void __sql_call_cb(const char *provider_id, int request_id, datacontrol_request_type type,
 		const char *data_id, bool provider_result, const char *error, long long insert_rowid, resultset_cursor *cursor, void *data)
@@ -144,8 +145,9 @@ static void __remove_sql_request_info(int request_id, sql_response_cb_s *sql_dc)
 
 }
 
-static int __sql_handle_cb(bundle *b, void *data, resultset_cursor *cursor)
+static int __sql_handle_cb(bundle *b, void *data, int fd)
 {
+	resultset_cursor *cursor = NULL;
 	int ret = 0;
 	const char **result_list = NULL;
 	const char *provider_id = NULL;
@@ -169,8 +171,6 @@ static int __sql_handle_cb(bundle *b, void *data, resultset_cursor *cursor)
 			request_id = atoi(p);
 
 		LOGI("Request ID: %d", request_id);
-
-		__remove_sql_request_info(request_id, sql_dc);
 
 		/* result list */
 		result_list = appsvc_get_data_array(b, OSP_K_ARG, &result_list_len);
@@ -221,6 +221,19 @@ static int __sql_handle_cb(bundle *b, void *data, resultset_cursor *cursor)
 
 		switch (request_type) {
 
+		case DATACONTROL_TYPE_SQL_SELECT:
+		{
+			if (provider_result) {
+				cursor = datacontrol_sql_get_cursor();
+				if (!cursor) {
+					LOGE("failed to get cursor on sql query resultset");
+					return DATACONTROL_ERROR_IO_ERROR;
+				}
+				if (__recv_sql_select_process(b, fd, cursor)
+						!= DATACONTROL_ERROR_NONE)
+					return DATACONTROL_ERROR_IO_ERROR;
+			}
+		}
 		case DATACONTROL_TYPE_SQL_INSERT:
 		{
 			LOGI("INSERT RESPONSE");
@@ -262,6 +275,7 @@ static int __sql_handle_cb(bundle *b, void *data, resultset_cursor *cursor)
 	} else
 		ret = DATACONTROL_ERROR_INVALID_PARAMETER;
 
+	__remove_sql_request_info(request_id, sql_dc);
 	return ret;
 }
 
@@ -514,7 +528,6 @@ static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 
 	gint fd = g_io_channel_unix_get_fd(channel);
 	gboolean retval = TRUE;
-	resultset_cursor *cursor = NULL;
 	char *buf = NULL;
 
 	LOGI("__consumer_recv_sql_message: ...from %d:%s%s%s%s\n", fd,
@@ -529,7 +542,6 @@ static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 	if (cond & G_IO_IN) {
 		int data_len;
 		guint nb;
-		datacontrol_request_type request_type = 0;
 		const char *p = NULL;
 
 		if (_read_socket(fd, (char *)&data_len, sizeof(data_len), &nb) != DATACONTROL_ERROR_NONE)
@@ -571,20 +583,7 @@ static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 				LOGE("Invalid Bundle: data-control request type is null");
 				goto error;
 			}
-			LOGI("request_type : %s", p);
-			request_type = (datacontrol_request_type)atoi(p);
-			if (request_type == DATACONTROL_TYPE_SQL_SELECT) {
-				cursor = datacontrol_sql_get_cursor();
-				if (!cursor) {
-					LOGE("failed to get cursor on sql query resultset");
-					goto error;
-				}
-				if (__recv_sql_select_process(kb, fd, cursor)
-						!= DATACONTROL_ERROR_NONE)
-					goto error;
-			}
-
-			if (__sql_handle_cb(kb, data, cursor)
+			if (__sql_handle_cb(kb, data, fd)
 						!= DATACONTROL_ERROR_NONE)
 				goto error;
 		}
@@ -598,7 +597,6 @@ error:
 
 	if (((sql_response_cb_s *)data) != NULL) {
 		LOGE("g_hash_table_remove");
-		g_hash_table_remove(__socket_pair_hash, ((sql_response_cb_s *)data)->provider_id);
 
 		sql_response_cb_s *sql_dc = (sql_response_cb_s *)data;
 		g_hash_table_remove(__socket_pair_hash, sql_dc->provider_id);
