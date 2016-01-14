@@ -144,127 +144,6 @@ static void __remove_sql_request_info(int request_id, sql_response_cb_s *sql_dc)
 
 }
 
-static int __sql_handle_cb(bundle *b, void *data, resultset_cursor *cursor)
-{
-	int ret = 0;
-	const char **result_list = NULL;
-	const char *provider_id = NULL;
-	const char *data_id = NULL;
-	const char *error_message = NULL;
-	long long insert_rowid = -1;
-	datacontrol_request_type request_type = 0;
-	int request_id = -1;
-	int result_list_len = 0;
-	int provider_result = 0;
-	const char *p = NULL;
-	sql_response_cb_s *sql_dc = (sql_response_cb_s *)data;
-
-	if (b) {
-		p = appsvc_get_data(b, OSP_K_REQUEST_ID);
-		if (!p) {
-			LOGE("Invalid Bundle: request_id is null");
-			return DATACONTROL_ERROR_INVALID_PARAMETER;
-
-		} else
-			request_id = atoi(p);
-
-		LOGI("Request ID: %d", request_id);
-
-		__remove_sql_request_info(request_id, sql_dc);
-
-		/* result list */
-		result_list = appsvc_get_data_array(b, OSP_K_ARG, &result_list_len);
-		if (!result_list) {
-			LOGE("Invalid Bundle: arguement list is null");
-			return DATACONTROL_ERROR_INVALID_PARAMETER;
-		}
-
-		p = result_list[0]; /* result list[0] = provider_result */
-		if (!p) {
-			LOGE("Invalid Bundle: provider_result is null");
-			return DATACONTROL_ERROR_INVALID_PARAMETER;
-		}
-
-		LOGI("Provider result: %s", p);
-
-		provider_result = atoi(p);
-
-		error_message = result_list[1]; /* result list[1] = error */
-		if (!error_message) {
-			LOGE("Invalid Bundle: error_message is null");
-			return DATACONTROL_ERROR_INVALID_PARAMETER;
-		}
-
-		LOGI("Error message: %s", error_message);
-
-		p = appsvc_get_data(b, OSP_K_DATACONTROL_REQUEST_TYPE);
-		if (!p) {
-			LOGE("Invalid Bundle: data-control request type is null");
-			return DATACONTROL_ERROR_INVALID_PARAMETER;
-		}
-
-		request_type = (datacontrol_request_type)atoi(p);
-
-		provider_id = appsvc_get_data(b, OSP_K_DATACONTROL_PROVIDER);
-		if (!provider_id) {
-			LOGE("Invalid Bundle: provider_id is null");
-			return DATACONTROL_ERROR_INVALID_PARAMETER;
-		}
-
-		data_id = appsvc_get_data(b, OSP_K_DATACONTROL_DATA);
-		if (!data_id) {
-			LOGE("Invalid Bundle: data_id is null");
-			return DATACONTROL_ERROR_INVALID_PARAMETER;
-		}
-
-		LOGI("Provider ID: %s, Data ID: %s, Operation type: %d", provider_id, data_id, request_type);
-
-		switch (request_type) {
-
-		case DATACONTROL_TYPE_SQL_INSERT:
-		{
-			LOGI("INSERT RESPONSE");
-			if (provider_result) {
-				p = result_list[2]; /* result list[2] */
-				if (!p) {
-					LOGE("Invalid Bundle: insert row_id is null");
-					return DATACONTROL_ERROR_INVALID_PARAMETER;
-				}
-
-				insert_rowid = atoll(p);
-			}
-			break;
-		}
-		case DATACONTROL_TYPE_SQL_UPDATE:
-		case DATACONTROL_TYPE_SQL_DELETE:
-		{
-			LOGI("UPDATE or DELETE RESPONSE");
-			break;
-		}
-		default:
-			break;
-		}
-
-	} else {
-		LOGE("the bundle returned from datacontrol-provider-service is null");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	}
-
-	if (request_type >=  DATACONTROL_TYPE_SQL_SELECT && request_type <=  DATACONTROL_TYPE_SQL_DELETE) {
-
-		__sql_call_cb(provider_id, request_id, request_type, data_id, provider_result, error_message, insert_rowid, cursor, data);
-
-		if ((request_type == DATACONTROL_TYPE_SQL_SELECT) && (cursor))
-			datacontrol_sql_remove_cursor(cursor);
-
-		ret = DATACONTROL_ERROR_NONE;
-
-	} else
-		ret = DATACONTROL_ERROR_INVALID_PARAMETER;
-
-	return ret;
-}
-
 static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *cursor)
 {
 
@@ -508,13 +387,146 @@ out:
 
 }
 
+static int __sql_handle_cb(bundle *b, void *data, int fd)
+{
+	resultset_cursor *cursor = NULL;
+	int ret = 0;
+	const char **result_list = NULL;
+	const char *provider_id = NULL;
+	const char *data_id = NULL;
+	const char *error_message = NULL;
+	long long insert_rowid = -1;
+	datacontrol_request_type request_type = 0;
+	int request_id = -1;
+	int result_list_len = 0;
+	int provider_result = 0;
+	const char *p = NULL;
+	sql_response_cb_s *sql_dc = (sql_response_cb_s *)data;
+
+	if (b) {
+		p = appsvc_get_data(b, OSP_K_REQUEST_ID);
+		if (!p) {
+			LOGE("Invalid Bundle: request_id is null");
+			return DATACONTROL_ERROR_INVALID_PARAMETER;
+
+		} else
+			request_id = atoi(p);
+
+		LOGI("Request ID: %d", request_id);
+
+		/* result list */
+		result_list = appsvc_get_data_array(b, OSP_K_ARG, &result_list_len);
+		if (!result_list) {
+			LOGE("Invalid Bundle: arguement list is null");
+			return DATACONTROL_ERROR_INVALID_PARAMETER;
+		}
+
+		p = result_list[0]; /* result list[0] = provider_result */
+		if (!p) {
+			LOGE("Invalid Bundle: provider_result is null");
+			return DATACONTROL_ERROR_INVALID_PARAMETER;
+		}
+
+		LOGI("Provider result: %s", p);
+
+		provider_result = atoi(p);
+
+		error_message = result_list[1]; /* result list[1] = error */
+		if (!error_message) {
+			LOGE("Invalid Bundle: error_message is null");
+			return DATACONTROL_ERROR_INVALID_PARAMETER;
+		}
+
+		LOGI("Error message: %s", error_message);
+
+		p = appsvc_get_data(b, OSP_K_DATACONTROL_REQUEST_TYPE);
+		if (!p) {
+			LOGE("Invalid Bundle: data-control request type is null");
+			return DATACONTROL_ERROR_INVALID_PARAMETER;
+		}
+
+		request_type = (datacontrol_request_type)atoi(p);
+
+		provider_id = appsvc_get_data(b, OSP_K_DATACONTROL_PROVIDER);
+		if (!provider_id) {
+			LOGE("Invalid Bundle: provider_id is null");
+			return DATACONTROL_ERROR_INVALID_PARAMETER;
+		}
+
+		data_id = appsvc_get_data(b, OSP_K_DATACONTROL_DATA);
+		if (!data_id) {
+			LOGE("Invalid Bundle: data_id is null");
+			return DATACONTROL_ERROR_INVALID_PARAMETER;
+		}
+
+		LOGI("Provider ID: %s, Data ID: %s, Operation type: %d", provider_id, data_id, request_type);
+
+		switch (request_type) {
+
+		case DATACONTROL_TYPE_SQL_SELECT:
+		{
+			if (provider_result) {
+				cursor = datacontrol_sql_get_cursor();
+				if (!cursor) {
+					LOGE("failed to get cursor on sql query resultset");
+					return DATACONTROL_ERROR_IO_ERROR;
+				}
+				if (__recv_sql_select_process(b, fd, cursor)
+						!= DATACONTROL_ERROR_NONE)
+					return DATACONTROL_ERROR_IO_ERROR;
+			}
+		}
+		case DATACONTROL_TYPE_SQL_INSERT:
+		{
+			LOGI("INSERT RESPONSE");
+			if (provider_result) {
+				p = result_list[2]; /* result list[2] */
+				if (!p) {
+					LOGE("Invalid Bundle: insert row_id is null");
+					return DATACONTROL_ERROR_INVALID_PARAMETER;
+				}
+
+				insert_rowid = atoll(p);
+			}
+			break;
+		}
+		case DATACONTROL_TYPE_SQL_UPDATE:
+		case DATACONTROL_TYPE_SQL_DELETE:
+		{
+			LOGI("UPDATE or DELETE RESPONSE");
+			break;
+		}
+		default:
+			break;
+		}
+
+	} else {
+		LOGE("the bundle returned from datacontrol-provider-service is null");
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	if (request_type >=  DATACONTROL_TYPE_SQL_SELECT && request_type <=  DATACONTROL_TYPE_SQL_DELETE) {
+
+		__sql_call_cb(provider_id, request_id, request_type, data_id, provider_result, error_message, insert_rowid, cursor, data);
+
+		if ((request_type == DATACONTROL_TYPE_SQL_SELECT) && (cursor))
+			datacontrol_sql_remove_cursor(cursor);
+
+		ret = DATACONTROL_ERROR_NONE;
+
+	} else
+		ret = DATACONTROL_ERROR_INVALID_PARAMETER;
+
+	__remove_sql_request_info(request_id, sql_dc);
+	return ret;
+}
+
 static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 		GIOCondition cond,
 		gpointer data) {
 
 	gint fd = g_io_channel_unix_get_fd(channel);
 	gboolean retval = TRUE;
-	resultset_cursor *cursor = NULL;
 	char *buf = NULL;
 
 	LOGI("__consumer_recv_sql_message: ...from %d:%s%s%s%s\n", fd,
@@ -529,7 +541,6 @@ static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 	if (cond & G_IO_IN) {
 		int data_len;
 		guint nb;
-		datacontrol_request_type request_type = 0;
 		const char *p = NULL;
 
 		if (_read_socket(fd, (char *)&data_len, sizeof(data_len), &nb) != DATACONTROL_ERROR_NONE)
@@ -571,20 +582,7 @@ static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 				LOGE("Invalid Bundle: data-control request type is null");
 				goto error;
 			}
-			LOGI("request_type : %s", p);
-			request_type = (datacontrol_request_type)atoi(p);
-			if (request_type == DATACONTROL_TYPE_SQL_SELECT) {
-				cursor = datacontrol_sql_get_cursor();
-				if (!cursor) {
-					LOGE("failed to get cursor on sql query resultset");
-					goto error;
-				}
-				if (__recv_sql_select_process(kb, fd, cursor)
-						!= DATACONTROL_ERROR_NONE)
-					goto error;
-			}
-
-			if (__sql_handle_cb(kb, data, cursor)
+			if (__sql_handle_cb(kb, data, fd)
 						!= DATACONTROL_ERROR_NONE)
 				goto error;
 		}
@@ -598,7 +596,6 @@ error:
 
 	if (((sql_response_cb_s *)data) != NULL) {
 		LOGE("g_hash_table_remove");
-		g_hash_table_remove(__socket_pair_hash, ((sql_response_cb_s *)data)->provider_id);
 
 		sql_response_cb_s *sql_dc = (sql_response_cb_s *)data;
 		g_hash_table_remove(__socket_pair_hash, sql_dc->provider_id);
