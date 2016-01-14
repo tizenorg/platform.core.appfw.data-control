@@ -193,7 +193,7 @@ static void __remove_map_request_info(int request_id, map_response_cb_s *map_dc)
 
 }
 
-static int __map_handle_cb(int fd, bundle *b, int request_type, appsvc_result_val res, void *data)
+static int __map_handle_cb(int fd, bundle *b, int request_type, int request_id, appsvc_result_val res, void *data)
 {
 	LOGI("__map_handle_cb, request_type: %d", request_type);
 
@@ -202,30 +202,16 @@ static int __map_handle_cb(int fd, bundle *b, int request_type, appsvc_result_va
 	const char *provider_id = NULL;
 	const char *data_id = NULL;
 	const char *error_message = NULL;
-	int request_id = -1;
 	int result_list_len = 0;
 	int provider_result = 0;
 	int value_count = 0;
 	char **value_list = NULL;
 	const char *p = NULL;
-	map_response_cb_s *map_dc = (map_response_cb_s *)data;
 
 	if (!b) {
 		LOGE("the bundle returned from datacontrol-provider-service is null");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
-
-	p = bundle_get_val(b, OSP_K_REQUEST_ID);
-	if (!p) {
-		LOGE("Invalid Bundle: request_id is null");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
-	} else {
-		request_id = atoi(p);
-	}
-
-	LOGI("Request ID: %d", request_id);
-
-	__remove_map_request_info(request_id, map_dc);
 
 	/* result list */
 	result_list = bundle_get_str_array(b, OSP_K_ARG, &result_list_len);
@@ -298,7 +284,6 @@ static int __map_handle_cb(int fd, bundle *b, int request_type, appsvc_result_va
 	} else
 		ret = DATACONTROL_ERROR_INVALID_PARAMETER;
 
-
 	return ret;
 }
 
@@ -348,10 +333,7 @@ static gboolean __recv_map_message(GIOChannel *channel,
 		GIOCondition cond,
 		gpointer data)
 {
-
 	gint fd = g_io_channel_unix_get_fd(channel);
-	gboolean retval = TRUE;
-
 	LOGI("__recv_map_message: ...from %d:%s%s%s%s\n", fd,
 			(cond & G_IO_ERR) ? " ERR" : "",
 			(cond & G_IO_HUP) ? " HUP" : "",
@@ -367,6 +349,8 @@ static gboolean __recv_map_message(GIOChannel *channel,
 		guint nb;
 		int request_type = 0;
 		const char *request_code = NULL;
+		const char *p = NULL;
+		int request_id = -1;
 
 		if (_read_socket(fd, (char *)&nbytes, sizeof(nbytes), &nb)) {
 			LOGE("Fail to read nbytes from socket");
@@ -410,6 +394,15 @@ static gboolean __recv_map_message(GIOChannel *channel,
 			LOGI("__recv_map_message: ...from %d: OK\n", fd);
 			LOGI("__recv_map_message: ...caller appid %s: OK\n", bundle_get_val(kb, AUL_K_CALLER_APPID));
 
+			p = bundle_get_val(kb, OSP_K_REQUEST_ID);
+			if (!p) {
+				LOGE("Invalid Bundle: request_id is null");
+				goto error;
+			} else {
+				request_id = atoi(p);
+			}
+			LOGI("Request ID: %d", request_id);
+
 			if (data) {
 				request_code = bundle_get_val(kb, OSP_K_DATACONTROL_REQUEST_TYPE);
 				if (!request_code) {
@@ -420,7 +413,7 @@ static gboolean __recv_map_message(GIOChannel *channel,
 				}
 				request_type = atoi(request_code);
 
-				if (__map_handle_cb(fd, kb, request_type, 0, data) != DATACONTROL_ERROR_NONE) {
+				if (__map_handle_cb(fd, kb, request_type, request_id, 0, data) != DATACONTROL_ERROR_NONE) {
 					free(buf);
 					bundle_free(kb);
 					goto error;
@@ -432,11 +425,12 @@ static gboolean __recv_map_message(GIOChannel *channel,
 				bundle_free(kb);
 				goto error;
 			}
+			__remove_map_request_info(request_id, data);
 			free(buf);
 			bundle_free(kb);
 		}
 	}
-	return retval;
+	return TRUE;
 error:
 	if (((map_response_cb_s *)data) != NULL) {
 
