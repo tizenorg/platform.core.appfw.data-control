@@ -225,8 +225,6 @@ static int __map_handle_cb(int fd, bundle *b, int request_type, appsvc_result_va
 
 	LOGI("Request ID: %d", request_id);
 
-	__remove_map_request_info(request_id, map_dc);
-
 	/* result list */
 	result_list = bundle_get_str_array(b, OSP_K_ARG, &result_list_len);
 	if (!result_list) {
@@ -298,6 +296,7 @@ static int __map_handle_cb(int fd, bundle *b, int request_type, appsvc_result_va
 	} else
 		ret = DATACONTROL_ERROR_INVALID_PARAMETER;
 
+	__remove_map_request_info(request_id, map_dc);
 
 	return ret;
 }
