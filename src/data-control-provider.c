@@ -324,6 +324,23 @@ static int __send_select_result(int fd, bundle *b, void *data)
 	return DATACONTROL_ERROR_NONE;
 }
 
+static int _get_int_from_str(const char *str)
+{
+	int result = 0;
+	char *pend;
+	errno = 0;
+	result = strtol(str, &pend, 10);
+	if ((result == LONG_MIN || result == LONG_MAX)
+		&& errno != 0) {
+		result = 0;
+	}
+
+	if (*pend != '\0')
+		result = 0;
+
+	return result;
+}
+
 static int __send_get_value_result(int fd, bundle *b, void *data)
 {
 
@@ -336,13 +353,19 @@ static int __send_get_value_result(int fd, bundle *b, void *data)
 
 	LOGI("page num: %s, count_per_page: %s, value_count %s", page_num_str, count_per_page_str, value_count_str);
 
-	int page_number = atoi(page_num_str);
-	int count_per_page = atoi(count_per_page_str);
-	int value_count = atoi(value_count_str);
-	int current_offset = (page_number - 1) * count_per_page;
-	int remain_count = value_count - current_offset;
+	int page_number = 0;
+	int count_per_page = 0;
+	int value_count = 0;
+	int current_offset = 0;
+	int remain_count = 0;
 	unsigned int nb;
 
+	page_number = _get_int_from_str(page_num_str);
+	count_per_page = _get_int_from_str(count_per_page_str);
+	value_count = _get_int_from_str(value_count_str);
+
+	current_offset = (page_number - 1) * count_per_page;
+	remain_count = value_count - current_offset;
 	remain_count = (remain_count > 0) ? remain_count : 0;	/* round off to zero if the negative num is found */
 
 	int add_value_count = (count_per_page > remain_count) ? remain_count : count_per_page;

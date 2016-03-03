@@ -222,6 +222,7 @@ static int __sql_handle_cb(bundle *b, void *data, int fd, int request_id)
 						!= DATACONTROL_ERROR_NONE)
 					return DATACONTROL_ERROR_IO_ERROR;
 			}
+			break;
 		}
 		case DATACONTROL_TYPE_SQL_INSERT:
 		{

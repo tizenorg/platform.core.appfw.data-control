@@ -333,6 +333,14 @@ static gboolean __recv_map_message(GIOChannel *channel,
 		GIOCondition cond,
 		gpointer data)
 {
+	char *buf = NULL;
+	int nbytes;
+	guint nb;
+	int request_type = 0;
+	const char *request_code = NULL;
+	const char *p = NULL;
+	int request_id = -1;
+	bundle *kb = NULL;
 	gint fd = g_io_channel_unix_get_fd(channel);
 	LOGI("__recv_map_message: ...from %d:%s%s%s%s\n", fd,
 			(cond & G_IO_ERR) ? " ERR" : "",
@@ -344,13 +352,6 @@ static gboolean __recv_map_message(GIOChannel *channel,
 		goto error;
 
 	if (cond & G_IO_IN) {
-		char *buf;
-		int nbytes;
-		guint nb;
-		int request_type = 0;
-		const char *request_code = NULL;
-		const char *p = NULL;
-		int request_id = -1;
 
 		if (_read_socket(fd, (char *)&nbytes, sizeof(nbytes), &nb)) {
 			LOGE("Fail to read nbytes from socket");
@@ -365,7 +366,6 @@ static gboolean __recv_map_message(GIOChannel *channel,
 
 		LOGI("__recv_map_message: ...from %d: %d bytes\n", fd, nbytes);
 		if (nbytes > 0) {
-			bundle *kb = NULL;
 
 			buf = (char *) calloc(nbytes + 1, sizeof(char));
 			if (buf == NULL) {
@@ -373,20 +373,17 @@ static gboolean __recv_map_message(GIOChannel *channel,
 				goto error;
 			}
 			if (_read_socket(fd, buf, nbytes, &nb)) {
-				free(buf);
 				LOGE("Fail to read buf from socket");
 				goto error;
 			}
 
 			if (nb == 0) {
-				free(buf);
 				LOGE("__recv_map_message: ...from %d: socket closed\n", fd);
 				goto error;
 			}
 
 			kb = bundle_decode_raw((bundle_raw *)buf, nbytes);
 			if (kb == NULL) {
-				free(buf);
 				LOGE("__recv_map_message: Unable to decode the bundle\n");
 				goto error;
 			}
@@ -407,31 +404,32 @@ static gboolean __recv_map_message(GIOChannel *channel,
 				request_code = bundle_get_val(kb, OSP_K_DATACONTROL_REQUEST_TYPE);
 				if (!request_code) {
 					LOGE("Invalid Bundle: data-control request type is null");
-					free(buf);
-					bundle_free(kb);
 					goto error;
 				}
 				request_type = atoi(request_code);
 
-				if (__map_handle_cb(fd, kb, request_type, request_id, 0, data) != DATACONTROL_ERROR_NONE) {
-					free(buf);
-					bundle_free(kb);
+				if (__map_handle_cb(fd, kb, request_type, request_id, 0, data) != DATACONTROL_ERROR_NONE)
 					goto error;
-				}
 
 			} else {
 				LOGE("error: listener information is null");
-				free(buf);
-				bundle_free(kb);
 				goto error;
 			}
 			__remove_map_request_info(request_id, data);
-			free(buf);
-			bundle_free(kb);
+
+			if (kb)
+				bundle_free(kb);
+			if (buf)
+				free(buf);
 		}
 	}
 	return TRUE;
 error:
+	if (kb)
+		bundle_free(kb);
+	if (buf)
+		free(buf);
+
 	if (((map_response_cb_s *)data) != NULL) {
 
 		map_response_cb_s *map_dc = (map_response_cb_s *)data;
