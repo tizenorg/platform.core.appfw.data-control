@@ -124,6 +124,7 @@ data_control_sql_get_data_id(data_control_h provider, char **data_id)
 EXPORT_API int
 data_control_sql_register_response_cb(data_control_h provider, data_control_sql_response_cb* callback, void *user_data)
 {
+
 	if (response_table == NULL)
 		__initialize();
 
@@ -154,6 +155,27 @@ data_control_sql_unregister_response_cb(data_control_h provider)
 		g_hash_table_remove(response_table, provider->provider_id);
 
 	return datacontrol_sql_unregister_response_cb((datacontrol_h)provider);
+}
+
+EXPORT_API int
+data_control_sql_register_data_changed_cb(data_control_h provider, data_control_sql_data_changed_cb callback, void *user_data)
+{
+	if (callback == NULL || provider == NULL)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_sql_register_data_changed_cb((datacontrol_h)provider, callback, user_data);
+}
+
+EXPORT_API int
+data_control_sql_unregister_data_changed_cb(data_control_h provider)
+{
+	if (provider == NULL)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	if (provider->provider_id)
+		g_hash_table_remove(response_table, provider->provider_id);
+
+	return datacontrol_sql_unregister_data_changed_cb((datacontrol_h)provider);
 }
 
 EXPORT_API int
@@ -196,7 +218,6 @@ data_control_sql_select_with_page(data_control_h provider, char **column_list, i
 
 	return datacontrol_sql_select_with_page((datacontrol_h)provider, column_list, column_count, where, order, page_number, count_per_page, request_id);
 }
-
 
 EXPORT_API int
 data_control_sql_update(data_control_h provider, const bundle* update_data, const char *where, int *request_id)

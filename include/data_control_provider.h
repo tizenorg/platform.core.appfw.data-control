@@ -460,6 +460,48 @@ bool data_control_provider_match_provider_id(data_control_h provider, const char
 bool data_control_provider_match_data_id(data_control_h provider, const char *data_id);
 
 /**
+ * @brief  Notify consumer apps which are registers MAP data changed callback.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  The provider handle
+ * @param[in]  type   Changed operation type
+ * @param[in]  data   Customized data
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int data_control_provider_send_map_changed_notify (
+    data_control_h provider,
+    data_control_noti_map_type_e type,
+    bundle *data);
+
+/**
+ * @brief  Notify consumer apps which are registers SQL data changed callback.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  The provider handle
+ * @param[in]  type   Changed operation type
+ * @param[in]  data   Customized data
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int data_control_provider_send_sql_changed_notify (
+    data_control_h provider,
+    data_control_noti_sql_type_e type,
+    bundle *data);
+
+/**
 * @}
 */
 
