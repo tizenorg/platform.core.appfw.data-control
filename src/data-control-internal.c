@@ -30,6 +30,8 @@
 
 #define BUFSIZE 512
 
+static GDBusConnection *_gdbus_conn = NULL;
+
 int _consumer_request_compare_cb(gconstpointer a, gconstpointer b)
 {
 	datacontrol_consumer_request_info *key1 = (datacontrol_consumer_request_info *)a;
@@ -270,3 +272,32 @@ int _request_appsvc_run(const char *caller_id, const char *callee_id)
 
 }
 
+int _dbus_init()
+{
+	int ret = DATACONTROL_ERROR_NONE;
+	GError *error = NULL;
+
+	if (_gdbus_conn == NULL) {
+		_gdbus_conn = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
+
+		if (_gdbus_conn == NULL) {
+			if (error != NULL) {
+				LOGE("Failed to get dbus [%s]", error->message);
+				g_error_free(error);
+			}
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+		ret = DATACONTROL_ERROR_NONE;
+	}
+	return ret;
+}
+
+GDBusConnection *_get_dbus_connection()
+{
+	int result = _dbus_init();
+	if (result != DATACONTROL_ERROR_NONE) {
+		LOGE("Can't init dbus %d", result);
+		return NULL;
+	}
+	return _gdbus_conn;
+}

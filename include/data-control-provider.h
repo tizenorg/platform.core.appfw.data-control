@@ -23,6 +23,7 @@
 #define _APPFW_DATA_CONTROL_PROVIDER_H_
 
 #include <data-control-types.h>
+#include <data_control_types.h>
 #include <data-control-sql-cursor.h>
 
 #ifdef __cplusplus
@@ -281,6 +282,11 @@ EXPORT_API int datacontrol_provider_send_map_result(int request_id);
  * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
  */
 EXPORT_API int datacontrol_provider_send_map_get_value_result(int request_id, char **value_list, int value_count);
+
+EXPORT_API int datacontrol_provider_send_changed_notify (
+	data_control_h provider,
+	const char *cmd,
+	bundle *data);
 
 #ifdef __cplusplus
 }

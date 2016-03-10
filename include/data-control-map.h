@@ -23,6 +23,8 @@
 #define _APPFW_DATA_CONTROL_MAP_H_
 
 #include <data-control-types.h>
+#include <data_control_types.h>
+#include <data_control_map.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -485,6 +487,27 @@ EXPORT_API int datacontrol_map_add(datacontrol_h provider, const char *key, cons
  * @endcode
  */
 EXPORT_API int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *value, int *request_id);
+
+/**
+ * @brief		Registers a callback function for the map data changed callback. @n
+ *				 The application is notified when provider's data is changed.
+ * @param [in]	provider	The provider handle
+ * @param [in]	callback	The callback function to be called when a response is received.
+ * @param [in]	user_data	The user data to be passed to the callback function
+ * @return		0 on success, otherwise a negative error value.
+ * @retval #DATACONTROL_ERROR_NONE	Successful
+ * @retval #DATACONTROL_ERROR_IO_ERROR I/O error
+ * @retval #DATACONTROL_ERROR_OUT_OF_MEMORY Out of memory
+ * @see	datacontrol_map_unregister_response_cb()
+ */
+EXPORT_API int datacontrol_map_register_data_changed_cb(datacontrol_h provider, data_control_map_data_changed_cb callback, void *user_data);
+
+/**
+ * @brief		Unregisters the callback function in @c provider.
+ * @param [in]	provider	The provider handle
+ * @return		0 on success, otherwise a negative error value.
+ */
+EXPORT_API int datacontrol_map_unregister_data_changed_cb(datacontrol_h provider);
 
 #ifdef __cplusplus
 }

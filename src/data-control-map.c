@@ -19,6 +19,9 @@
 #include "data-control-map.h"
 #include "data-control-internal.h"
 
+#define DATA_CONTROL_OBJECT_PATH "/org/tizen/data_control_service"
+#define DATA_CONTROL_INTERFACE_NAME "org.tizen.data_control_service"
+
 struct datacontrol_s {
 	char *provider_id;
 	char *data_id;
@@ -33,6 +36,14 @@ typedef struct {
 	GList *request_info_list;
 	datacontrol_map_response_cb *map_response_cb;
 } map_response_cb_s;
+
+typedef struct {
+	void *user_data;
+	data_control_map_data_changed_cb map_data_changed_cb;
+} map_data_changed_cb_s;
+
+static GHashTable *__changed_callback_hash = NULL;
+static int __monitor_id = 0;
 
 static void *datacontrol_map_tree_root = NULL;
 static const int MAX_ARGUMENT_SIZE = 16384; /* 16KB */
@@ -966,4 +977,136 @@ int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *
 	bundle_free(b);
 
 	return ret;
+}
+
+static void __noti_map_process(data_control_noti_map_type_e type, GVariant *parameters, gpointer user_data)
+{
+	char *provider_id = NULL;
+	char *data_id = NULL;
+	bundle_raw *raw = NULL;
+	bundle *data = NULL;
+	int len = 0;
+	datacontrol_h provider;
+	map_data_changed_cb_s *cb_info = NULL;
+
+	g_variant_get(parameters, "(&s&s&si)", &provider_id, &data_id, &raw, &len);
+	LOGI("__noti_map_process: %s %s %d", provider_id, data_id, len);
+
+	if (provider_id == NULL || data_id == NULL)
+		return;
+
+	datacontrol_map_create(&provider);
+	datacontrol_map_set_provider_id(provider, provider_id);
+	datacontrol_map_set_data_id(provider, data_id);
+	data = bundle_decode(raw, len);
+
+	cb_info = g_hash_table_lookup(__changed_callback_hash, provider_id);
+	if (cb_info != NULL)
+		cb_info->map_data_changed_cb((data_control_h)provider, type, data, cb_info->user_data);
+	else
+		LOGE("data_control_map_data_changed_cb is null");
+}
+
+static void __handle_map_noti(GDBusConnection *connection,
+		const gchar     *sender_name,
+		const gchar     *object_path,
+		const gchar     *interface_name,
+		const gchar     *signal_name,
+		GVariant        *parameters,
+		gpointer         user_data)
+{
+	LOGI("signal_name: %s", signal_name);
+
+	data_control_noti_map_type_e type = DATA_CONTROL_NOTI_MAP_UNDEFINED;
+
+	if (g_strcmp0(signal_name, "noti_map_set") == 0)
+		type = DATA_CONTROL_NOTI_MAP_SET;
+	else if (g_strcmp0(signal_name, "noti_map_add") == 0)
+		type = DATA_CONTROL_NOTI_MAP_ADD;
+	else if (g_strcmp0(signal_name, "noti_map_remove") == 0)
+		type = DATA_CONTROL_NOTI_MAP_REMOVE;
+
+	if (type != DATA_CONTROL_NOTI_MAP_UNDEFINED)
+		__noti_map_process(type, parameters, user_data);
+}
+
+static int __dbus_signal_init()
+{
+	int id;
+	int ret = DATACONTROL_ERROR_NONE;
+
+	if (__monitor_id == 0) {
+		id = g_dbus_connection_signal_subscribe(
+				_get_dbus_connection(),
+				NULL,
+				DATA_CONTROL_INTERFACE_NAME,	/*	interface */
+				NULL,				/*	member */
+				DATA_CONTROL_OBJECT_PATH,		/*	path */
+				NULL,				/*	arg0 */
+				G_DBUS_SIGNAL_FLAGS_NONE,
+				__handle_map_noti,
+				NULL,
+				NULL);
+
+		LOGI("subscribe id : %d", id);
+		if (id == 0) {
+			ret = DATACONTROL_ERROR_IO_ERROR;
+			LOGE("Failed to _register_noti_dbus_interface");
+		} else {
+			__monitor_id = id;
+			ret = DATACONTROL_ERROR_NONE;
+		}
+	}
+	return ret;
+}
+
+static void __init_changed_cb_hash()
+{
+	if (__changed_callback_hash == NULL) {
+		__changed_callback_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+		LOGI("__changed_callback_hash is NULL create new one.");
+	}
+}
+
+int datacontrol_map_register_data_changed_cb(datacontrol_h provider, data_control_map_data_changed_cb callback, void *user_data)
+{
+	LOGI("datacontrol_map_register_data_changed_cb");
+
+	char *id = NULL;
+	int ret = DATACONTROL_ERROR_NONE;
+	map_data_changed_cb_s *cb_info = NULL;
+
+	ret = __dbus_signal_init();
+	if (ret != DATACONTROL_ERROR_NONE)
+		return ret;
+
+	id = strdup(provider->provider_id);
+	if (id == NULL)
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+
+	cb_info = (map_data_changed_cb_s *)calloc(1, sizeof(map_data_changed_cb_s));
+	if (cb_info == NULL) {
+		LOGE("Out of memory.");
+		free(id);
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+
+	cb_info->user_data = user_data;
+	cb_info->map_data_changed_cb = callback;
+
+	__init_changed_cb_hash();
+	g_hash_table_insert(__changed_callback_hash, id, cb_info);
+
+	LOGI("datacontrol_map_register_data_changed_cb done for %s", id);
+
+	return DATACONTROL_ERROR_NONE;
+}
+
+int datacontrol_map_unregister_data_changed_cb(datacontrol_h provider)
+{
+	LOGI("map unregister_data_changed_cb");
+	if (!g_hash_table_remove(__changed_callback_hash, provider->provider_id)) {
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+	return DATACONTROL_ERROR_NONE;
 }
