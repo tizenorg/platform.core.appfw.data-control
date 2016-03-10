@@ -33,6 +33,21 @@ extern "C" {
  * @{
  */
 
+
+/**
+ * @brief  Called when a response is received for an key-value data changed notification from an application using the key-value-friendly interface based data control.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider         The provider handle
+ * @param[in]  type  			Changed data type
+ * @param[in]  data  			The data from provider
+ * @param[in]  user_data        The user data passed from the register function
+ */
+typedef void (*data_control_map_data_changed_cb) (data_control_h provider,
+	data_control_noti_map_type_e type,
+	bundle *data,
+	void *user_data);
+
 /**
  * @brief  Called when the result value list is received from the key-value structured data control provider.
  * @since_tizen 2.3
@@ -605,6 +620,39 @@ int data_control_map_add(data_control_h provider, const char *key, const char *v
  * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
  */
 int data_control_map_remove(data_control_h provider, const char *key, const char *value, int *request_id);
+
+/**
+ * @brief  Registers a callback function for the MAP data control data changed notification.
+ * @since_tizen 3.0
+ *
+ * remarks The application is notified when provider's data is changed.
+ *
+ * @param[in]  provider  The provider handle
+ * @param[in]  callback  The callback function to be called when a response is received
+ * @param[in]  user_data The user data to be passed to the callback function
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE          Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR      I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY Out of memory
+ *
+ * @see  data_control_map_register_data_changed_cb()
+ */
+int data_control_map_register_data_changed_cb(data_control_h provider, data_control_map_data_changed_cb callback, void *user_data);
+
+/**
+ * @brief  Unregisters the data changed callback function in the @a provider.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  The provider handle
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ */
+int data_control_map_unregister_data_changed_cb(data_control_h provider);
+
 
 /**
 * @}

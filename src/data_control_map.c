@@ -159,6 +159,31 @@ data_control_map_unregister_response_cb(data_control_h provider)
 }
 
 EXPORT_API int
+data_control_map_register_data_changed_cb(data_control_h provider, data_control_map_data_changed_cb callback, void *user_data)
+{
+	int retval = datacontrol_check_privilege(PRIVILEGE_CONSUMER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
+	if (callback == NULL || provider == NULL)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_map_register_data_changed_cb((datacontrol_h)provider, callback, user_data);
+}
+
+EXPORT_API int
+data_control_map_unregister_data_changed_cb(data_control_h provider)
+{
+	if (provider == NULL)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	if (provider->provider_id)
+		g_hash_table_remove(response_table, provider->provider_id);
+
+	return datacontrol_map_unregister_data_changed_cb((datacontrol_h)provider);
+}
+
+EXPORT_API int
 data_control_map_get(data_control_h provider, const char *key, int *request_id)
 {
 	int retval = datacontrol_check_privilege(PRIVILEGE_CONSUMER);

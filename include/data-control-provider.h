@@ -23,6 +23,7 @@
 #define _APPFW_DATA_CONTROL_PROVIDER_H_
 
 #include <data-control-types.h>
+#include <data_control_types.h>
 #include <data-control-sql-cursor.h>
 
 #ifdef __cplusplus
@@ -281,6 +282,28 @@ EXPORT_API int datacontrol_provider_send_map_result(int request_id);
  * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
  */
 EXPORT_API int datacontrol_provider_send_map_get_value_result(int request_id, char **value_list, int value_count);
+
+/**
+ * @brief  Notify consumer apps which are registers data changed callback.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  The provider handle
+ * @param[in]  cmd   Changed operation type (SQL/MAP)
+ * @param[in]  data   Customized data
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATACONTROL_ERROR_NONE              Successful
+ * @retval #DATACONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATACONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATACONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+EXPORT_API int datacontrol_provider_send_changed_notify (
+	data_control_h provider,
+	const char *cmd,
+	bundle *data);
 
 #ifdef __cplusplus
 }

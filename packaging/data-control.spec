@@ -14,6 +14,7 @@ BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(capi-base-common)
 BuildRequires:  pkgconfig(cynara-client)
 BuildRequires:  pkgconfig(sqlite3)
+BuildRequires:  pkgconfig(openssl)
 
 # runtime requires
 Requires(post): /sbin/ldconfig
@@ -55,13 +56,13 @@ mkdir -p %{buildroot}/usr/share/license
 install LICENSE.APLv2  %{buildroot}/usr/share/license/%{name}
 
 %post -p /sbin/ldconfig
-
 %postun -p /sbin/ldconfig
-
 
 %files
 %{_libdir}/lib%{name}.so.*
 %{_libdir}/libcapi-data-control.so.*
+%config %{_sysconfdir}/dbus-1/session.d/data-control.conf
+
 %manifest %{name}.manifest
 /usr/share/license/%{name}
 

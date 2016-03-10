@@ -50,16 +50,14 @@
 #define PACKET_INDEX_MAP_PAGE_NO	2
 #define PACKET_INDEX_MAP_COUNT_PER_PAGE	3
 
+#define DATA_CONTROL_BUS_NAME "org.tizen.data_control_service"
+#define DATA_CONTROL_OBJECT_PATH "/org/tizen/data_control_service"
+#define DATA_CONTROL_INTERFACE_NAME "org.tizen.data_control_service"
+
 static GHashTable *__request_table = NULL;
 static GHashTable *__socket_pair_hash = NULL;
 
 /* static pthread_mutex_t provider_lock = PTHREAD_MUTEX_INITIALIZER; */
-
-struct datacontrol_s {
-	char *provider_id;
-	char *data_id;
-};
-
 
 typedef int (*provider_handler_cb) (bundle *b, int request_id, void *data);
 
@@ -1158,5 +1156,57 @@ int datacontrol_provider_send_map_get_value_result(int request_id, char **value_
 	g_hash_table_remove(__request_table, &request_id);
 
 	return ret;
+}
 
+int datacontrol_provider_send_changed_notify (
+	data_control_h provider,
+	const char *cmd,
+	bundle *data)
+{
+	LOGI("Send datacontrol_provider_send_changed_notify");
+	int len;
+	bundle_raw *raw = NULL;
+	GError *err = NULL;
+	int result = DATACONTROL_ERROR_NONE;
+	char *path = NULL;
+
+	path = _get_encoded_path((datacontrol_h)provider);
+	if (path == NULL) {
+		LOGE("can not get encoded path out of memory");
+		result = DATACONTROL_ERROR_OUT_OF_MEMORY;
+		goto out;
+	}
+
+	if (bundle_encode(data, &raw, &len) != BUNDLE_ERROR_NONE) {
+		LOGE("bundle_encode fail");
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	LOGI("emit signal to object path %s", path);
+	if (g_dbus_connection_emit_signal(
+				_get_dbus_connection(),
+				NULL,
+				path,
+				DATA_CONTROL_INTERFACE_NAME,
+				cmd,
+				g_variant_new("(sssi)",
+				 ((datacontrol_h)provider)->provider_id, ((datacontrol_h)provider)->data_id, ((raw) ? (char *)raw : ""), len), &err) == FALSE) {
+
+		LOGE("g_dbus_connection_emit_signal() is failed");
+		if (err != NULL) {
+			LOGE("g_dbus_connection_emit_signal() err : %s",
+					err->message);
+			g_error_free(err);
+		}
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+	LOGI("Send datacontrol_provider_send_changed_notify %s done %d", cmd, result);
+out:
+	if (path)
+		free(path);
+	if (raw)
+		free(raw);
+
+	return result;
 }
