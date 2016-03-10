@@ -4,6 +4,7 @@
 #include <bundle.h>
 
 #include <data-control-provider.h>
+#include <data-control-types.h>
 
 #include "data_control_provider.h"
 #include "data_control_sql.h"
@@ -16,6 +17,18 @@
 #define SELECT_STMT_CONST_LEN 13
 #define WHERE_COND_CONST_LEN 7
 #define ORDER_CLS_CONST_LEN 10
+
+static const char *NOTI_SQL_CMD_STRING[] = {
+	"noti_sql_update",
+	"noti_sql_insert",
+	"noti_sql_delete",
+};
+
+static const char *NOTI_MAP_CMD_STRING[] = {
+	"noti_map_set",
+	"noti_map_add",
+	"noti_map_remove",
+};
 
 struct data_control_s {
 	char *provider_id;
@@ -536,4 +549,42 @@ EXPORT_API int
 data_control_provider_send_map_get_value_result(int request_id, char **value_list, int value_count)
 {
 	return datacontrol_provider_send_map_get_value_result(request_id, value_list, value_count);
+}
+
+EXPORT_API int data_control_provider_send_map_changed_notify (
+	data_control_h provider,
+	data_control_noti_map_type_e type,
+	bundle *data)
+{
+	LOGI("Send map changed notify : type %d", type);
+	int retval = datacontrol_check_privilege(PRIVILEGE_PROVIDER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	if (type <= DATA_CONTROL_NOTI_MAP_UNDEFINED || type >= DATA_CONTROL_NOTI_MAP_MAX)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_send_changed_notify((datacontrol_h)provider, DATACONTROL_PATH_TYPE_MAP, NOTI_MAP_CMD_STRING[type], data);
+}
+
+EXPORT_API int data_control_provider_send_sql_changed_notify (
+	data_control_h provider,
+	data_control_noti_sql_type_e type,
+	bundle *data)
+{
+	LOGI("Send sql changed notify : type %d", type);
+	int retval = datacontrol_check_privilege(PRIVILEGE_PROVIDER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	if (type <= DATA_CONTROL_NOTI_SQL_UNDEFINED || type >= DATA_CONTROL_NOTI_SQL_MAX)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_send_changed_notify((datacontrol_h)provider, DATACONTROL_PATH_TYPE_SQL, NOTI_SQL_CMD_STRING[type], data);
 }

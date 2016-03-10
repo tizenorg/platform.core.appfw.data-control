@@ -157,6 +157,31 @@ data_control_sql_unregister_response_cb(data_control_h provider)
 }
 
 EXPORT_API int
+data_control_sql_register_data_changed_cb(data_control_h provider, data_control_sql_data_changed_cb callback, void *user_data)
+{
+	int retval = datacontrol_check_privilege(PRIVILEGE_CONSUMER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
+	if (callback == NULL || provider == NULL)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_sql_register_data_changed_cb((datacontrol_h)provider, callback, user_data);
+}
+
+EXPORT_API int
+data_control_sql_unregister_data_changed_cb(data_control_h provider)
+{
+	if (provider == NULL)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	if (provider->provider_id)
+		g_hash_table_remove(response_table, provider->provider_id);
+
+	return datacontrol_sql_unregister_data_changed_cb((datacontrol_h)provider);
+}
+
+EXPORT_API int
 data_control_sql_insert(data_control_h provider, const bundle* insert_data, int *request_id)
 {
 
@@ -196,7 +221,6 @@ data_control_sql_select_with_page(data_control_h provider, char **column_list, i
 
 	return datacontrol_sql_select_with_page((datacontrol_h)provider, column_list, column_count, where, order, page_number, count_per_page, request_id);
 }
-
 
 EXPORT_API int
 data_control_sql_update(data_control_h provider, const bundle* update_data, const char *where, int *request_id)

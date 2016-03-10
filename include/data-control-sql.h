@@ -22,6 +22,7 @@
 #ifndef _APPFW_DATA_CONTROL_SQL_H_
 #define _APPFW_DATA_CONTROL_SQL_H_
 
+#include <data_control_sql.h>
 #include <data-control-types.h>
 #include <data-control-sql-cursor.h>
 
@@ -502,6 +503,27 @@ EXPORT_API int datacontrol_sql_select_with_page(datacontrol_h provider, char **c
  * @endcode
  */
 EXPORT_API int datacontrol_sql_update(datacontrol_h provider, const bundle* update_data, const char *where, int *request_id);
+
+/**
+ * @brief		Registers a callback function for the sql data changed callback. @n
+ *				 The application is notified when provider's data is changed.
+ * @param [in]	provider	The provider handle
+ * @param [in]	callback	The callback function to be called when a response is received.
+ * @param [in]	user_data	The user data to be passed to the callback function
+ * @return		0 on success, otherwise a negative error value.
+ * @retval #DATACONTROL_ERROR_NONE	Successful
+ * @retval #DATACONTROL_ERROR_IO_ERROR I/O error
+ * @retval #DATACONTROL_ERROR_OUT_OF_MEMORY Out of memory
+ * @see	datacontrol_sql_unregister_response_cb()
+ */
+EXPORT_API int datacontrol_sql_register_data_changed_cb(datacontrol_h provider, data_control_sql_data_changed_cb callback, void *user_data);
+
+/**
+ * @brief		Unregisters the callback function in @c provider.
+ * @param [in]	provider	The provider handle
+ * @return		0 on success, otherwise a negative error value.
+ */
+EXPORT_API int datacontrol_sql_unregister_data_changed_cb(datacontrol_h provider);
 
 #ifdef __cplusplus
 }
