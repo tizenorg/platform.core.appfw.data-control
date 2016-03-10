@@ -50,8 +50,16 @@
 #define PACKET_INDEX_MAP_PAGE_NO	2
 #define PACKET_INDEX_MAP_COUNT_PER_PAGE	3
 
+#define DATA_CONTROL_BUS_NAME "org.tizen.data_control_service"
+#define DATA_CONTROL_OBJECT_PATH "/org/tizen/data_control_service"
+#define DATA_CONTROL_INTERFACE_NAME "org.tizen.data_control_service"
+
+static GDBusConnection *_gdbus_conn = NULL;
+
 static GHashTable *__request_table = NULL;
 static GHashTable *__socket_pair_hash = NULL;
+
+
 
 /* static pthread_mutex_t provider_lock = PTHREAD_MUTEX_INITIALIZER; */
 
@@ -59,7 +67,6 @@ struct datacontrol_s {
 	char *provider_id;
 	char *data_id;
 };
-
 
 typedef int (*provider_handler_cb) (bundle *b, int request_id, void *data);
 
@@ -1158,5 +1165,62 @@ int datacontrol_provider_send_map_get_value_result(int request_id, char **value_
 	g_hash_table_remove(__request_table, &request_id);
 
 	return ret;
+}
 
+
+static int _dbus_init(void)
+{
+
+	LOGI("data_control _dbus_init for data changed notify");
+	GError *error = NULL;
+	if(_gdbus_conn == NULL) {
+		_gdbus_conn = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
+		if (_gdbus_conn == NULL) {
+			if (error != NULL) {
+				LOGE("Failed to get dbus [%s]", error->message);
+				g_error_free(error);
+			}
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+	}
+
+	return DATACONTROL_ERROR_NONE;
+}
+
+int datacontrol_provider_send_changed_notify (
+	data_control_h provider,
+	const char *cmd,
+	bundle *data)
+{
+	LOGI("Send datacontrol_provider_send_changed_notify");
+	int len;
+	bundle_raw *raw = NULL;
+	GError *err = NULL;
+	int result = _dbus_init();
+	if (result != DATACONTROL_ERROR_NONE) {
+		LOGE("Can't init dbus %d", result);
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+
+	if (bundle_encode(data, &raw, &len) != BUNDLE_ERROR_NONE)
+		return DATACONTROL_ERROR_IO_ERROR;
+
+	if (g_dbus_connection_emit_signal(_gdbus_conn,
+				NULL,
+				DATA_CONTROL_OBJECT_PATH,
+				DATA_CONTROL_INTERFACE_NAME,
+				cmd,
+				g_variant_new("(sssi)",
+				 ((datacontrol_h)provider)->provider_id, ((datacontrol_h)provider)->data_id, ((raw) ? (char *)raw : ""), len), &err) == FALSE) {
+
+		LOGE("g_dbus_connection_emit_signal() is failed");
+		if (err != NULL) {
+			LOGE("g_dbus_connection_emit_signal() err : %s",
+					err->message);
+			g_error_free(err);
+		}
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+	LOGI("Send datacontrol_provider_send_changed_notify %s done %d", cmd, result);
+	return result;
 }

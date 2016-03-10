@@ -107,7 +107,7 @@ void _socket_info_free (gpointer socket);
 datacontrol_socket_info * _get_socket_info(const char *caller_id, const char *callee_id, const char *type, GIOFunc cb, void *data);
 int _request_appsvc_run(const char *caller_id, const char *callee_id);
 
-
+GDBusConnection *_get_dbus_connection();
 
 #endif /* _APPFW_DATA_CONTROL_INTERNAL_H_ */
 
