@@ -19,10 +19,8 @@
 #include "data-control-map.h"
 #include "data-control-internal.h"
 
-struct datacontrol_s {
-	char *provider_id;
-	char *data_id;
-};
+#define DATA_CONTROL_OBJECT_PATH "/org/tizen/data_control_service"
+#define DATA_CONTROL_INTERFACE_NAME "org.tizen.data_control_service"
 
 typedef struct {
 	char *provider_id;
@@ -34,9 +32,36 @@ typedef struct {
 	datacontrol_map_response_cb *map_response_cb;
 } map_response_cb_s;
 
+typedef struct {
+	void *user_data;
+	data_control_map_data_changed_cb map_data_changed_cb;
+	int monitor_id;
+	char *provider_id;
+	char *data_id;
+} map_data_changed_cb_info_s;
+
+static GList *__changed_callback_list = NULL;
+
 static void *datacontrol_map_tree_root = NULL;
 static const int MAX_ARGUMENT_SIZE = 16384; /* 16KB */
 static GHashTable *__socket_pair_hash = NULL;
+
+static int __map_data_changed_info_compare_cb(gconstpointer a, gconstpointer b)
+{
+	map_data_changed_cb_info_s *key1 = (map_data_changed_cb_info_s *)a;
+	map_data_changed_cb_info_s *key2 = (map_data_changed_cb_info_s *)b;
+
+	return (strcmp(key1->provider_id, key2->provider_id) || strcmp(key1->data_id, key2->data_id));
+}
+
+static void __free_map_data_changed_cb_info(map_data_changed_cb_info_s *info)
+{
+	if (info->provider_id)
+		free(info->provider_id);
+	if (info->data_id)
+		free(info->data_id);
+	free(info);
+}
 
 static void __map_call_cb(const char *provider_id, int request_id, datacontrol_request_type type,
 	const char *data_id, bool provider_result, const char *error, char **result_value_list, int result_value_count, void *data)
@@ -966,4 +991,159 @@ int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *
 	bundle_free(b);
 
 	return ret;
+}
+
+static void __noti_map_process(data_control_noti_map_type_e type, GVariant *parameters, gpointer user_data)
+{
+	char *provider_id = NULL;
+	char *data_id = NULL;
+	bundle_raw *raw = NULL;
+	bundle *data = NULL;
+	int len = 0;
+	datacontrol_h provider;
+	GList *find_list;
+	map_data_changed_cb_info_s *cb_info = NULL;
+	map_data_changed_cb_info_s info;
+
+	g_variant_get(parameters, "(&s&s&si)", &provider_id, &data_id, &raw, &len);
+	LOGI("__noti_map_process: %s %s %d", provider_id, data_id, len);
+
+	if (provider_id == NULL || data_id == NULL)
+		return;
+
+	datacontrol_map_create(&provider);
+	datacontrol_map_set_provider_id(provider, provider_id);
+	datacontrol_map_set_data_id(provider, data_id);
+	data = bundle_decode(raw, len);
+
+	info.provider_id = provider_id;
+	info.data_id = data_id;
+
+	find_list = g_list_find_custom(__changed_callback_list, &info,
+					(GCompareFunc)__map_data_changed_info_compare_cb);
+	if (find_list != NULL) {
+		cb_info = (map_data_changed_cb_info_s *)find_list->data;
+		cb_info->map_data_changed_cb((data_control_h)provider, type, data, cb_info->user_data);
+	} else {
+		LOGE("data_control_map_data_changed_cb is null");
+	}
+}
+
+static void __handle_map_noti(GDBusConnection *connection,
+		const gchar     *sender_name,
+		const gchar     *object_path,
+		const gchar     *interface_name,
+		const gchar     *signal_name,
+		GVariant        *parameters,
+		gpointer         user_data)
+{
+	LOGI("signal_name: %s", signal_name);
+
+	data_control_noti_map_type_e type = DATA_CONTROL_NOTI_MAP_UNDEFINED;
+
+	if (g_strcmp0(signal_name, "noti_map_set") == 0)
+		type = DATA_CONTROL_NOTI_MAP_SET;
+	else if (g_strcmp0(signal_name, "noti_map_add") == 0)
+		type = DATA_CONTROL_NOTI_MAP_ADD;
+	else if (g_strcmp0(signal_name, "noti_map_remove") == 0)
+		type = DATA_CONTROL_NOTI_MAP_REMOVE;
+
+	if (type != DATA_CONTROL_NOTI_MAP_UNDEFINED)
+		__noti_map_process(type, parameters, user_data);
+}
+
+int datacontrol_map_register_data_changed_cb(datacontrol_h provider, data_control_map_data_changed_cb callback, void *user_data)
+{
+	LOGI("datacontrol_map_register_data_changed_cb");
+
+	char *provider_id = NULL;
+	char *data_id = NULL;
+	int ret = DATACONTROL_ERROR_NONE;
+	map_data_changed_cb_info_s *cb_info = NULL;
+	map_data_changed_cb_info_s *removed_cb_info = NULL;
+	int monitor_id = 0;
+	GList *find_list;
+	char *path = NULL;
+
+	path = _get_encoded_path(provider);
+	if (path == NULL) {
+		LOGE("cannot get encoded path. out of memory.");
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+
+	ret = _dbus_signal_init(&monitor_id, path, __handle_map_noti);
+	if (ret != DATACONTROL_ERROR_NONE) {
+		LOGE("fail to init dbus signal.");
+		free(path);
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+
+	provider_id = strdup(provider->provider_id);
+	if (provider_id == NULL) {
+		LOGE("provider_id alloc fail out of memory.");
+		free(path);
+		g_dbus_connection_signal_unsubscribe(_get_dbus_connection(), monitor_id);
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+
+	data_id = strdup(provider->data_id);
+	if (data_id == NULL) {
+		LOGE("data_id alloc fail out of memory.");
+		free(path);
+		free(provider_id);
+		g_dbus_connection_signal_unsubscribe(_get_dbus_connection(), monitor_id);
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+
+	cb_info = (map_data_changed_cb_info_s *)calloc(1, sizeof(map_data_changed_cb_info_s));
+	if (cb_info == NULL) {
+		LOGE("map_data_changed_cb_info_s alloc fail out of memory.");
+		free(path);
+		free(provider_id);
+		free(data_id);
+		g_dbus_connection_signal_unsubscribe(_get_dbus_connection(), monitor_id);
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+
+	cb_info->user_data = user_data;
+	cb_info->map_data_changed_cb = callback;
+	cb_info->provider_id = provider_id;
+	cb_info->data_id = data_id;
+	cb_info->monitor_id = monitor_id;
+
+	find_list = g_list_find_custom(__changed_callback_list, cb_info,
+					(GCompareFunc)__map_data_changed_info_compare_cb);
+
+	if (find_list != NULL) {
+		removed_cb_info = (map_data_changed_cb_info_s *)find_list->data;
+		__changed_callback_list = g_list_remove(__changed_callback_list, removed_cb_info);
+		__free_map_data_changed_cb_info(removed_cb_info);
+	}
+	__changed_callback_list = g_list_append(__changed_callback_list, cb_info);
+	LOGI("datacontrol_map_register_data_changed_cb done for %s", provider_id);
+
+	return ret;
+}
+
+int datacontrol_map_unregister_data_changed_cb(datacontrol_h provider)
+{
+	LOGI("map unregister_data_changed_cb");
+	map_data_changed_cb_info_s *removed_cb_info = NULL;
+	map_data_changed_cb_info_s info;
+	GList *find_list = NULL;
+
+	info.provider_id = provider->provider_id;
+	info.data_id = provider->data_id;
+
+	find_list = g_list_find_custom(__changed_callback_list, &info,
+					(GCompareFunc)__map_data_changed_info_compare_cb);
+
+	if (find_list != NULL) {
+		removed_cb_info = (map_data_changed_cb_info_s *)find_list->data;
+		__changed_callback_list = g_list_remove(__changed_callback_list, removed_cb_info);
+		g_dbus_connection_signal_unsubscribe(_get_dbus_connection(), removed_cb_info->monitor_id);
+		__free_map_data_changed_cb_info(removed_cb_info);
+	}
+
+	return DATACONTROL_ERROR_NONE;
 }

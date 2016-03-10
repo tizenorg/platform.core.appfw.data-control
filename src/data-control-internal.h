@@ -88,6 +88,11 @@ typedef struct datacontrol_consumer_request {
 	datacontrol_request_type type;
 } datacontrol_consumer_request_info;
 
+struct datacontrol_s {
+	char *provider_id;
+	char *data_id;
+};
+
 int _consumer_request_compare_cb(gconstpointer a, gconstpointer b);
 
 int _datacontrol_sql_set_cursor(const char *path);
@@ -107,7 +112,8 @@ void _socket_info_free (gpointer socket);
 datacontrol_socket_info * _get_socket_info(const char *caller_id, const char *callee_id, const char *type, GIOFunc cb, void *data);
 int _request_appsvc_run(const char *caller_id, const char *callee_id);
 
-
+GDBusConnection *_get_dbus_connection();
+int _dbus_signal_init(int *monitor_id, char *path, GDBusSignalCallback callback);
+char *_get_encoded_path(datacontrol_h provider);
 
 #endif /* _APPFW_DATA_CONTROL_INTERNAL_H_ */
-
