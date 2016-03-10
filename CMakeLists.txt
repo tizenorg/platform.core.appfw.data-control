@@ -8,7 +8,7 @@ INCLUDE_DIRECTORIES (
 	include
 	)
 
-SET(requires "dlog bundle glib-2.0 appsvc pkgmgr-info capi-base-common cynara-client sqlite3")
+SET(requires "dlog bundle glib-2.0 appsvc pkgmgr-info capi-base-common cynara-client sqlite3 openssl")
 INCLUDE(FindPkgConfig)
 pkg_check_modules(pkgs REQUIRED ${requires})
 
@@ -47,6 +47,9 @@ ADD_CUSTOM_COMMAND(
 
 SET(VERSION ${FULLVER})
 CONFIGURE_FILE(${PROJECT_NAME}.pc.in ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.pc @ONLY)
+CONFIGURE_FILE(${PROJECT_NAME}.conf.in ${PROJECT_NAME}.conf @ONLY)
+
+INSTALL(FILES ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.conf DESTINATION ${SYSCONF_INSTALL_DIR}/dbus-1/session.d/)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
 CONFIGURE_FILE(capi-${PROJECT_NAME}.pc.in ${CMAKE_SOURCE_DIR}/capi-${PROJECT_NAME}.pc @ONLY)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/capi-${PROJECT_NAME}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
