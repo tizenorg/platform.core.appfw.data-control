@@ -28,6 +28,7 @@
 #define RESULT_PAGE_NUMBER		"RESULT_PAGE_NUMBER"
 #define MAX_RETRY			5
 
+#define ERR_BUFFER_SIZE         1024
 #define BUFSIZE 512
 
 int _consumer_request_compare_cb(gconstpointer a, gconstpointer b)
@@ -168,7 +169,7 @@ void _socket_info_free(gpointer socket)
 datacontrol_socket_info *_get_socket_info(const char *caller_id, const char *callee_id, const char *type,
 		GIOFunc cb, void *data)
 {
-
+	char err_buf[ERR_BUFFER_SIZE];
 	int socketpair = 0;
 	datacontrol_socket_info *socket_info = NULL;
 	bundle *sock_bundle = bundle_create();
@@ -185,7 +186,7 @@ datacontrol_socket_info *_get_socket_info(const char *caller_id, const char *cal
 		GIOChannel *gio_read = NULL;
 		gio_read = g_io_channel_unix_new(socketpair);
 		if (!gio_read) {
-			LOGE("Error is %s\n", strerror(errno));
+			LOGE("Error is %s\n", strerror_r(errno, err_buf, sizeof(err_buf)));
 			return NULL;
 		}
 
