@@ -1,18 +1,18 @@
-//
-// Copyright (c) 2013 Samsung Electronics Co., Ltd.
-//
-// Licensed under the Apache License, Version 2.0 (the License);
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
+/*
+ * Copyright (c) 2013 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 /**
  * @file	data-control-internal.h
@@ -43,7 +43,7 @@
 #define DATACONTROL_SELECT_STATEMENT	"DATACONTROL_SELECT_STATEMENT"
 
 #define DATACONTROL_EMPTY		"NULL"
-#define DATACONTROL_SELECT_EXTRA_COUNT		6  // data id, column count, where, order, page, per_page
+#define DATACONTROL_SELECT_EXTRA_COUNT	6  /* data id, column count, where, order, page, per_page */
 #define DATACONTROL_RESULT_NO_DATA	-1
 
 #define OSP_V_LAUNCH_TYPE_DATACONTROL	"datacontrol"
@@ -57,8 +57,7 @@
 /**
  * @brief Enumerations of different type of data control requests.
  */
-typedef enum
-{
+typedef enum {
 	DATACONTROL_TYPE_ERROR = -1,
 	DATACONTROL_TYPE_UNDEFINED,
 	DATACONTROL_TYPE_SQL_SELECT,
@@ -89,25 +88,26 @@ typedef struct datacontrol_consumer_request {
 } datacontrol_consumer_request_info;
 
 int _consumer_request_compare_cb(gconstpointer a, gconstpointer b);
-
 int _datacontrol_sql_set_cursor(const char *path);
-
-char *_datacontrol_create_select_statement(char *data_id, const char **column_list, int column_count,
-		const char *where, const char *order, int page_number, int count_per_page);
-
+char *_datacontrol_create_select_statement(char *data_id,
+		const char **column_list, int column_count,
+		const char *where, const char *order, int page_number,
+		int count_per_page);
 int _datacontrol_create_request_id(void);
-
-int _datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type type, void *data);
-int _read_socket(int fd, char *buffer, unsigned int nbytes, unsigned int *bytes_read);
-int _write_socket(int fd, void *buffer, unsigned int nbytes, unsigned int *bytes_write);
-
-gboolean _datacontrol_recv_message(GIOChannel *channel, GIOCondition cond, gpointer data);
-int _get_gdbus_shared_connection(GDBusConnection **connection, char *provider_id);
-void _socket_info_free (gpointer socket);
-datacontrol_socket_info * _get_socket_info(const char *caller_id, const char *callee_id, const char *type, GIOFunc cb, void *data);
+int _datacontrol_send_async(int sockfd, bundle *kb,
+		datacontrol_request_type type, void *data);
+int _read_socket(int fd, char *buffer, unsigned int nbytes,
+		unsigned int *bytes_read);
+int _write_socket(int fd, void *buffer, unsigned int nbytes,
+		unsigned int *bytes_write);
+gboolean _datacontrol_recv_message(GIOChannel *channel, GIOCondition cond,
+		gpointer data);
+int _get_gdbus_shared_connection(GDBusConnection **connection,
+		char *provider_id);
+void _socket_info_free(gpointer socket);
+datacontrol_socket_info * _get_socket_info(const char *caller_id,
+		const char *callee_id, const char *type, GIOFunc cb,
+		void *data);
 int _request_appsvc_run(const char *caller_id, const char *callee_id);
 
-
-
 #endif /* _APPFW_DATA_CONTROL_INTERNAL_H_ */
-

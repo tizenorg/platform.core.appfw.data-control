@@ -1,18 +1,18 @@
-//
-// Copyright (c) 2013 Samsung Electronics Co., Ltd.
-//
-// Licensed under the Apache License, Version 2.0 (the License);
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
+/*
+ * Copyright (c) 2013 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 /**
  * @file	data-control-sql-cursor.h
@@ -33,8 +33,7 @@ extern "C" {
 /**
  * @brief	The structure type to represent a sql result set. This type can be used to enumerate through the result set of an SQL query.
  */
-typedef struct
-{
+typedef struct {
 	int resultset_fd;
 	sqlite3_int64 resultset_row_count;
 	int resultset_col_count;
@@ -140,17 +139,17 @@ EXPORT_API int datacontrol_sql_step_last(resultset_cursor *cursor);
 EXPORT_API int datacontrol_sql_step_next(resultset_cursor *cursor);
 
 /**
- * @brief		Moves the cursor to the previous position
+ * @brief	Moves the cursor to the previous position
  *
  * @param [in]	cursor	Navigates the result of the request for the select operation
- * @return		0 on success, otherwise a negative error value.
+ * @return	0 on success, otherwise a negative error value.
  * @retval #DATACONTROL_ERROR_NONE	Successful
  * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
  */
 EXPORT_API int datacontrol_sql_step_previous(resultset_cursor *cursor);
 
 /**
- * @brief 	Gets the number of columns for this cursor
+ * @brief	Gets the number of columns for this cursor
  *
  * @param [in]	cursor	Navigates the result of the request for the select operation
  * @return		The number of columns in the calling cursor
@@ -158,48 +157,48 @@ EXPORT_API int datacontrol_sql_step_previous(resultset_cursor *cursor);
 EXPORT_API int datacontrol_sql_get_column_count(resultset_cursor *cursor);
 
 /**
- * @brief		Gets the name of the column indicated by the specified index
+ * @brief	Gets the name of the column indicated by the specified index
  *
- * @param [in] 	cursor	Navigates the result of the request for the select operation
- * @param [in]	column_index		The index of the destination column
- * @param [out]	name			The name of the destination column
- * @return		0 on success, otherwise a negative error value.
+ * @param [in]	cursor		Navigates the result of the request for the select operation
+ * @param [in]	column_index	The index of the destination column
+ * @param [out]	name		The name of the destination column
+ * @return	0 on success, otherwise a negative error value.
  * @retval #DATACONTROL_ERROR_NONE	Successful
  * @retval #DATACONTROL_ERROR_IO_ERROR I/O error
  */
 EXPORT_API int datacontrol_sql_get_column_name(resultset_cursor *cursor, int column_index, char *name);
 
 /**
- * @brief		Gets the size of data in the column indicated by the specified index
+ * @brief	Gets the size of data in the column indicated by the specified index
  *
- * @param [in]	cursor	Navigates the result of the request for the select operation
- * @param [in]	column_index		The index of the destination column
- * @return		The size of data in the column indicated by the specified index. @n
- *				If an error is occurred, a negative value is returned.
+ * @param [in]	cursor		Navigates the result of the request for the select operation
+ * @param [in]	column_index	The index of the destination column
+ * @return	The size of data in the column indicated by the specified index. @n
+ *		If an error is occurred, a negative value is returned.
  * @retval #DATACONTROL_ERROR_IO_ERROR I/O error
  */
 EXPORT_API int datacontrol_sql_get_column_item_size(resultset_cursor *cursor, int column_index);
 
 /**
- * @brief		Gets the type of the column indicated by the specified index
+ * @brief	Gets the type of the column indicated by the specified index
  *
  * @param [in]	cursor		Navigates the result of the request for the select operation
  * @param [in]	column_index	The index of the destination column
- * @param [out]	type			The type of the destination column
- * @return		0 on success, otherwise a negative error value.
+ * @param [out]	type		The type of the destination column
+ * @return	0 on success, otherwise a negative error value.
  * @retval #DATACONTROL_ERROR_NONE	Successful
  * @retval #DATACONTROL_ERROR_IO_ERROR I/O error
  */
 EXPORT_API int datacontrol_sql_get_column_item_type(resultset_cursor *cursor, int column_index, datacontrol_sql_column_type* type);
 
 /**
- * @brief		Gets a blob data from the column indicated by the specified index
+ * @brief	Gets a blob data from the column indicated by the specified index
  *
  * @param [in]	cursor		Navigates the result of the request for the select operation
  * @param [in]	column_index	The index of the destination column
- * @param [out]	data			The blob value obtained from the column
- * @param [out]	size			The size of the data
- * @return		0 on success, otherwise a negative error value.
+ * @param [out]	data		The blob value obtained from the column
+ * @param [out]	size		The size of the data
+ * @return	0 on success, otherwise a negative error value.
  * @retval #DATACONTROL_ERROR_NONE	Successful
  * @retval #DATACONTROL_ERROR_IO_ERROR I/O error
  * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
@@ -208,12 +207,12 @@ EXPORT_API int datacontrol_sql_get_column_item_type(resultset_cursor *cursor, in
 EXPORT_API int datacontrol_sql_get_blob_data(resultset_cursor *cursor, int column_index, void *data, int size);
 
 /**
- * @brief		Gets an int value from the column indicated by the specified index
+ * @brief	Gets an int value from the column indicated by the specified index
  *
  * @param [in]	cursor		Navigates the result of the request for the select operation
  * @param [in]	column_index	The index of the destination column
- * @param [out]	data			The integer value obtained from the column
- * @return		0 on success, otherwise a negative error value.
+ * @param [out]	data		The integer value obtained from the column
+ * @return	0 on success, otherwise a negative error value.
  * @retval #DATACONTROL_ERROR_NONE	Successful
  * @retval #DATACONTROL_ERROR_IO_ERROR I/O error
  * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
@@ -221,12 +220,12 @@ EXPORT_API int datacontrol_sql_get_blob_data(resultset_cursor *cursor, int colum
 EXPORT_API int datacontrol_sql_get_int_data(resultset_cursor *cursor, int column_index, int *data);
 
 /**
- * @brief		Gets a long long value from the column indicated by the specified index
+ * @brief	Gets a long long value from the column indicated by the specified index
  *
  * @param [in]	cursor		Navigates the result of the request for the select operation
  * @param [in]	column_index	The index of the destination column
- * @param [out]	data			The 64-bit integer value obtained from the column
- * @return		0 on success, otherwise a negative error value.
+ * @param [out]	data		The 64-bit integer value obtained from the column
+ * @return	0 on success, otherwise a negative error value.
  * @retval #DATACONTROL_ERROR_NONE	Successful
  * @retval #DATACONTROL_ERROR_IO_ERROR I/O error
  * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
@@ -234,12 +233,12 @@ EXPORT_API int datacontrol_sql_get_int_data(resultset_cursor *cursor, int column
 EXPORT_API int datacontrol_sql_get_int64_data(resultset_cursor *cursor, int column_index, long long *data);
 
 /**
- * @brief		Gets a double value from the column indicated by the specified index
+ * @brief	Gets a double value from the column indicated by the specified index
  *
  * @param [in]	cursor		Navigates the result of the request for the select operation
- * @param [in]	column_index		The index of the destination column
- * @param [out]	data			The value obtained from the column as double
- * @return		0 on success, otherwise a negative error value.
+ * @param [in]	column_index	The index of the destination column
+ * @param [out]	data		The value obtained from the column as double
+ * @return	0 on success, otherwise a negative error value.
  * @retval #DATACONTROL_ERROR_NONE	Successful
  * @retval #DATACONTROL_ERROR_IO_ERROR I/O error
  * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
@@ -247,12 +246,12 @@ EXPORT_API int datacontrol_sql_get_int64_data(resultset_cursor *cursor, int colu
 EXPORT_API int datacontrol_sql_get_double_data(resultset_cursor *cursor, int column_index, double *data);
 
 /**
- * @brief		Gets a text value from the column indicated by the specified index
+ * @brief	Gets a text value from the column indicated by the specified index
  *
  * @param [in]	cursor		Navigates the result of the request for the select operation
  * @param [in]	column_index	The index of the destination column
- * @param [out]	data			The value obtained from the column as text
- * @return		0 on success, otherwise a negative error value.
+ * @param [out]	data		The value obtained from the column as text
+ * @return	0 on success, otherwise a negative error value.
  * @retval #DATACONTROL_ERROR_NONE	Successful
  * @retval #DATACONTROL_ERROR_IO_ERROR I/O error
  * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
@@ -261,10 +260,10 @@ EXPORT_API int datacontrol_sql_get_double_data(resultset_cursor *cursor, int col
 EXPORT_API int datacontrol_sql_get_text_data(resultset_cursor *cursor, int column_index, char *data);
 
 /**
- * @brief		Removes the @c cursor containing SQL result set
+ * @brief	Removes the @c cursor containing SQL result set
  *
  * @param [in]	cursor		A pointer to the result set cursor to be removed
- * @return		0 on success, otherwise a negative error value.
+ * @return	0 on success, otherwise a negative error value.
  * @retval #DATACONTROL_ERROR_NONE	Successful
  * @retval #DATACONTROL_ERROR_IO_ERROR I/O error
  */
