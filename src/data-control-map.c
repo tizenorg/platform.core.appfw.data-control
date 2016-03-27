@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2013 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <dlog.h>
 #include <errno.h>
 #include <search.h>
@@ -60,9 +76,7 @@ static void __map_call_cb(const char *provider_id, int request_id, datacontrol_r
 	datacontrol_map_set_data_id(provider, data_id);
 
 	switch (type) {
-
 	case DATACONTROL_TYPE_MAP_GET:
-	{
 		LOGI("GET VALUE");
 		if (callback != NULL && callback->get != NULL)
 			callback->get(request_id, provider, result_value_list, result_value_count, provider_result, error, map_dc->user_data);
@@ -70,9 +84,7 @@ static void __map_call_cb(const char *provider_id, int request_id, datacontrol_r
 			LOGI("No registered callback function");
 
 		break;
-	}
 	case DATACONTROL_TYPE_MAP_SET:
-	{
 		LOGI("SET VALUE");
 		if (callback != NULL && callback->set != NULL)
 			callback->set(request_id, provider, provider_result, error, map_dc->user_data);
@@ -80,9 +92,7 @@ static void __map_call_cb(const char *provider_id, int request_id, datacontrol_r
 			LOGI("No registered callback function");
 
 		break;
-	}
 	case DATACONTROL_TYPE_MAP_ADD:
-	{
 		LOGI("ADD VALUE");
 		if (callback != NULL && callback->add != NULL)
 			callback->add(request_id, provider, provider_result, error, map_dc->user_data);
@@ -90,9 +100,7 @@ static void __map_call_cb(const char *provider_id, int request_id, datacontrol_r
 			LOGI("No registered callback function");
 
 		break;
-	}
 	case DATACONTROL_TYPE_MAP_REMOVE:
-	{
 		LOGI("REMOVE VALUE");
 		if (callback != NULL && callback->remove != NULL)
 			callback->remove(request_id, provider, provider_result, error, map_dc->user_data);
@@ -100,7 +108,6 @@ static void __map_call_cb(const char *provider_id, int request_id, datacontrol_r
 			LOGI("No registered callback function");
 
 		break;
-	}
 	default:
 		break;
 	}
@@ -136,6 +143,7 @@ static char **__map_get_value_list(int fd, int *value_count)
 	int count = 0;
 	int nbytes = 0;
 	unsigned int nb = 0;
+	int j;
 
 	if (_read_socket(fd, (char *)&count, sizeof(count), &nb)) {
 		LOGE("datacontrol_recv_map_get_value_list : ...from %d: fail to read\n", fd);
@@ -170,7 +178,6 @@ static char **__map_get_value_list(int fd, int *value_count)
 
 ERROR:
 	if (value_list) {
-		int j;
 		for (j = 0; j < i; j++) {
 			if (value_list[j] != NULL)
 				free(value_list[j]);
@@ -190,13 +197,10 @@ static void __remove_map_request_info(int request_id, map_response_cb_s *map_dc)
 			(GCompareFunc)_consumer_request_compare_cb);
 	if (list != NULL)
 		map_dc->request_info_list = g_list_remove(map_dc->request_info_list, list->data);
-
 }
 
 static int __map_handle_cb(int fd, bundle *b, int request_type, int request_id, appsvc_result_val res, void *data)
 {
-	LOGI("__map_handle_cb, request_type: %d", request_type);
-
 	int ret = 0;
 	const char **result_list = NULL;
 	const char *provider_id = NULL;
@@ -207,6 +211,8 @@ static int __map_handle_cb(int fd, bundle *b, int request_type, int request_id, 
 	int value_count = 0;
 	char **value_list = NULL;
 	const char *p = NULL;
+
+	LOGI("__map_handle_cb, request_type: %d", request_type);
 
 	if (!b) {
 		LOGE("the bundle returned from datacontrol-provider-service is null");
@@ -254,7 +260,6 @@ static int __map_handle_cb(int fd, bundle *b, int request_type, int request_id, 
 
 	switch (request_type) {
 	case DATACONTROL_TYPE_MAP_GET:
-	{
 		LOGI("GET RESPONSE");
 		if (provider_result) {
 			value_list = __map_get_value_list(fd, &value_count);
@@ -265,14 +270,11 @@ static int __map_handle_cb(int fd, bundle *b, int request_type, int request_id, 
 			}
 		}
 		break;
-	}
 	case DATACONTROL_TYPE_MAP_SET:
 	case DATACONTROL_TYPE_MAP_ADD:
 	case DATACONTROL_TYPE_MAP_REMOVE:
-	{
 		LOGI("SET or ADD or REMOVE RESPONSE");
 		break;
-	}
 	default:
 		break;
 	}
@@ -281,23 +283,23 @@ static int __map_handle_cb(int fd, bundle *b, int request_type, int request_id, 
 		__map_call_cb(provider_id, request_id, request_type, data_id, provider_result,
 				error_message, value_list, value_count, data);
 		ret = DATACONTROL_ERROR_NONE;
-	} else
+	} else {
 		ret = DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
 
 	return ret;
 }
 
 static int __datacontrol_send_map_async(int sockfd, bundle *kb, datacontrol_request_type type, void *data)
 {
-
-	LOGI("send async ~~~");
-
 	bundle_raw *kb_data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
 	int datalen;
 	char *buf = NULL;
 	int total_len;
 	unsigned int nb = 0;
+
+	LOGI("send async ~~~");
 
 	bundle_encode_raw(kb, &kb_data, &datalen);
 	if (kb_data == NULL) {
@@ -328,7 +330,6 @@ static int __datacontrol_send_map_async(int sockfd, bundle *kb, datacontrol_requ
 	return ret;
 }
 
-
 static gboolean __recv_map_message(GIOChannel *channel,
 		GIOCondition cond,
 		gpointer data)
@@ -342,6 +343,10 @@ static gboolean __recv_map_message(GIOChannel *channel,
 	int request_id = -1;
 	bundle *kb = NULL;
 	gint fd = g_io_channel_unix_get_fd(channel);
+	map_response_cb_s *map_dc;
+	GList *itr;
+	datacontrol_consumer_request_info *request_info;
+
 	LOGI("__recv_map_message: ...from %d:%s%s%s%s\n", fd,
 			(cond & G_IO_ERR) ? " ERR" : "",
 			(cond & G_IO_HUP) ? " HUP" : "",
@@ -352,7 +357,6 @@ static gboolean __recv_map_message(GIOChannel *channel,
 		goto error;
 
 	if (cond & G_IO_IN) {
-
 		if (_read_socket(fd, (char *)&nbytes, sizeof(nbytes), &nb)) {
 			LOGE("Fail to read nbytes from socket");
 			goto error;
@@ -366,7 +370,6 @@ static gboolean __recv_map_message(GIOChannel *channel,
 
 		LOGI("__recv_map_message: ...from %d: %d bytes\n", fd, nbytes);
 		if (nbytes > 0) {
-
 			buf = (char *) calloc(nbytes + 1, sizeof(char));
 			if (buf == NULL) {
 				LOGE("Malloc failed!!");
@@ -410,7 +413,6 @@ static gboolean __recv_map_message(GIOChannel *channel,
 
 				if (__map_handle_cb(fd, kb, request_type, request_id, 0, data) != DATACONTROL_ERROR_NONE)
 					goto error;
-
 			} else {
 				LOGE("error: listener information is null");
 				goto error;
@@ -431,13 +433,12 @@ error:
 		free(buf);
 
 	if (((map_response_cb_s *)data) != NULL) {
-
-		map_response_cb_s *map_dc = (map_response_cb_s *)data;
+		map_dc = (map_response_cb_s *)data;
 		g_hash_table_remove(__socket_pair_hash, map_dc->provider_id);
 
-		GList *itr = g_list_first(map_dc->request_info_list);
+		itr = g_list_first(map_dc->request_info_list);
 		while (itr != NULL) {
-			datacontrol_consumer_request_info *request_info = (datacontrol_consumer_request_info *)itr->data;
+			request_info = (datacontrol_consumer_request_info *)itr->data;
 			__map_call_cb(map_dc->provider_id, request_info->request_id, request_info->type, map_dc->data_id, false,
 					"provider IO Error", NULL, 0, data);
 			itr = g_list_next(itr);
@@ -453,11 +454,18 @@ error:
 
 static int __map_request_provider(datacontrol_h provider, datacontrol_request_type type, bundle *request_data, int request_id)
 {
-	LOGI("Map Data control request, type: %d, request id: %d", type, request_id);
-
 	char *app_id = NULL;
 	void *data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
+	void *map_dc_returned = NULL;
+	char caller_app_id[255];
+	char datacontrol_request_operation[MAX_LEN_DATACONTROL_REQ_TYPE] = {0, };
+	char req_id[32] = {0,};
+	int count = 0;
+	const int TRY_COUNT = 2;
+	const struct timespec TRY_SLEEP_TIME = { 0, 1000 * 1000 * 1000 };
+
+	LOGI("Map Data control request, type: %d, request id: %d", type, request_id);
 
 	if (type < DATACONTROL_TYPE_MAP_GET || type > DATACONTROL_TYPE_MAP_REMOVE) {
 		LOGE("Invalid request type: %d", (int)type);
@@ -498,7 +506,6 @@ static int __map_request_provider(datacontrol_h provider, datacontrol_request_ty
 	map_dc_temp->user_data = NULL;
 	map_dc_temp->map_response_cb = NULL;
 
-	void *map_dc_returned = NULL;
 	map_dc_returned = tfind(map_dc_temp, &datacontrol_map_tree_root, __map_instance_compare);
 
 	__map_instance_free(map_dc_temp);
@@ -518,7 +525,6 @@ static int __map_request_provider(datacontrol_h provider, datacontrol_request_ty
 
 	LOGI("Map datacontrol appid: %s", map_dc->app_id);
 
-	char caller_app_id[255];
 	pid_t pid = getpid();
 	if (aul_app_get_appid_bypid(pid, caller_app_id, sizeof(caller_app_id)) != 0) {
 		LOGE("Failed to get appid by pid(%d).", pid);
@@ -528,22 +534,16 @@ static int __map_request_provider(datacontrol_h provider, datacontrol_request_ty
 	bundle_add_str(request_data, OSP_K_DATACONTROL_PROTOCOL_VERSION, OSP_V_VERSION_2_1_0_3);
 	bundle_add_str(request_data, AUL_K_CALLER_APPID, caller_app_id);
 
-	char datacontrol_request_operation[MAX_LEN_DATACONTROL_REQ_TYPE] = {0, };
 	snprintf(datacontrol_request_operation, MAX_LEN_DATACONTROL_REQ_TYPE, "%d", (int)(type));
 	bundle_add_str(request_data, OSP_K_DATACONTROL_REQUEST_TYPE, datacontrol_request_operation);
 
-	char req_id[32] = {0,};
 	snprintf(req_id, 32, "%d", request_id);
 	bundle_add_str(request_data, OSP_K_REQUEST_ID, req_id);
 
-	int count = 0;
-	const int TRY_COUNT = 2;
-	const struct timespec TRY_SLEEP_TIME = { 0, 1000 * 1000 * 1000 };
 	LOGI("caller_id %s, app_id %s", caller_app_id, app_id);
 
 	do {
 		datacontrol_socket_info *socket_info = g_hash_table_lookup(__socket_pair_hash, provider->provider_id);
-
 		if (socket_info == NULL) {
 			ret = _request_appsvc_run(caller_app_id, app_id);
 			if (ret != DATACONTROL_ERROR_NONE)
@@ -564,11 +564,9 @@ static int __map_request_provider(datacontrol_h provider, datacontrol_request_ty
 			break;
 		count++;
 		nanosleep(&TRY_SLEEP_TIME, 0);
-
 	} while (ret != DATACONTROL_ERROR_NONE && count < TRY_COUNT);
 
 	return ret;
-
 }
 
 int datacontrol_map_create(datacontrol_h *provider)
@@ -631,8 +629,9 @@ int datacontrol_map_get_provider_id(datacontrol_h provider, char **provider_id)
 		if (*provider_id == NULL)
 			return DATACONTROL_ERROR_OUT_OF_MEMORY;
 
-	} else
+	} else {
 		*provider_id = NULL;
+	}
 
 	return 0;
 }
@@ -662,8 +661,9 @@ int datacontrol_map_get_data_id(datacontrol_h provider, char **data_id)
 		if (*data_id == NULL)
 			return DATACONTROL_ERROR_OUT_OF_MEMORY;
 
-	} else
+	} else {
 		*data_id = NULL;
+	}
 
 	return 0;
 }
@@ -673,6 +673,7 @@ int datacontrol_map_register_response_cb(datacontrol_h provider, datacontrol_map
 	int ret = 0;
 	char *app_id = NULL;
 	char *access = NULL;
+	void *map_dc_returned = NULL;
 
 	ret = pkgmgrinfo_appinfo_usr_get_datacontrol_info(provider->provider_id, "Map", getuid(), &app_id, &access);
 	if (ret != PMINFO_R_OK) {
@@ -708,7 +709,6 @@ int datacontrol_map_register_response_cb(datacontrol_h provider, datacontrol_map
 	map_dc_temp->user_data = user_data;
 	map_dc_temp->map_response_cb = callback;
 
-	void *map_dc_returned = NULL;
 	map_dc_returned = tsearch(map_dc_temp, &datacontrol_map_tree_root, __map_instance_compare);
 
 	map_response_cb_s *map_dc = *(map_response_cb_s **)map_dc_returned;
@@ -741,6 +741,7 @@ int datacontrol_map_unregister_response_cb(datacontrol_h provider)
 {
 	int ret = DATACONTROL_ERROR_NONE;
 	map_response_cb_s *map_dc_temp = (map_response_cb_s *)calloc(1, sizeof(map_response_cb_s));
+	void *map_dc_returned = NULL;
 
 	g_hash_table_remove(__socket_pair_hash, provider->provider_id);
 
@@ -756,8 +757,6 @@ int datacontrol_map_unregister_response_cb(datacontrol_h provider)
 		ret = DATACONTROL_ERROR_OUT_OF_MEMORY;
 		goto EXCEPTION;
 	}
-
-	void *map_dc_returned = NULL;
 
 	map_dc_returned = tdelete(map_dc_temp, &datacontrol_map_tree_root, __map_instance_compare);
 	if (map_dc_returned == NULL) {
@@ -784,6 +783,13 @@ int datacontrol_map_get(datacontrol_h provider, const char *key, int *request_id
 
 int datacontrol_map_get_with_page(datacontrol_h provider, const char *key, int *request_id, int page_number, int count_per_page)
 {
+	unsigned int arg_size;
+	int ret = 0;
+	const char *arg_list[4];
+	char page_no_str[32];
+	char count_per_page_str[32];
+	int reqId;
+
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL || key == NULL) {
 		LOGE("Invalid parameter");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -791,13 +797,12 @@ int datacontrol_map_get_with_page(datacontrol_h provider, const char *key, int *
 
 	LOGI("Gets the value list from provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
-	unsigned int arg_size = (strlen(provider->data_id) + strlen(key)) * sizeof(wchar_t);
+	arg_size = (strlen(provider->data_id) + strlen(key)) * sizeof(wchar_t);
 	if (arg_size > MAX_ARGUMENT_SIZE) {
 		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
 
-	int ret = 0;
 	bundle *b = bundle_create();
 	if (!b) {
 		LOGE("unable to create bundle: %d", errno);
@@ -807,20 +812,17 @@ int datacontrol_map_get_with_page(datacontrol_h provider, const char *key, int *
 	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
 	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
 
-	const char *arg_list[4];
 	arg_list[0] = provider->data_id;
 	arg_list[1] = key;
 
-	char page_no_str[32] = {0, };
-	ret = snprintf(page_no_str, 32, "%d", page_number);
+	ret = snprintf(page_no_str, sizeof(page_no_str), "%d", page_number);
 	if (ret < 0) {
 		LOGE("unable to convert page no to string: %d", errno);
 		bundle_free(b);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
 	}
 
-	char count_per_page_str[32] = {0, };
-	ret = snprintf(count_per_page_str, 32, "%d", count_per_page);
+	ret = snprintf(count_per_page_str, sizeof(count_per_page_str), "%d", count_per_page);
 	if (ret < 0) {
 		LOGE("unable to convert count per page no to string: %d", errno);
 		bundle_free(b);
@@ -833,7 +835,7 @@ int datacontrol_map_get_with_page(datacontrol_h provider, const char *key, int *
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 4);
 
 	/* Set the request id */
-	int reqId = _datacontrol_create_request_id();
+	reqId = _datacontrol_create_request_id();
 	*request_id = reqId;
 
 	ret = __map_request_provider(provider, DATACONTROL_TYPE_MAP_GET, b, reqId);
@@ -844,6 +846,12 @@ int datacontrol_map_get_with_page(datacontrol_h provider, const char *key, int *
 
 int datacontrol_map_set(datacontrol_h provider, const char *key, const char *old_value, const char *new_value, int *request_id)
 {
+	unsigned int arg_size;
+	bundle *b;
+	const char *arg_list[4];
+	int reqId;
+	int ret;
+
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL || key == NULL || old_value == NULL || new_value == NULL) {
 		LOGE("Invalid parameter");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -851,13 +859,13 @@ int datacontrol_map_set(datacontrol_h provider, const char *key, const char *old
 
 	LOGI("Sets the old value to new value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
-	unsigned int arg_size = (strlen(provider->data_id) + strlen(key) + strlen(old_value) + strlen(new_value)) * sizeof(wchar_t);
+	arg_size = (strlen(provider->data_id) + strlen(key) + strlen(old_value) + strlen(new_value)) * sizeof(wchar_t);
 	if (arg_size > MAX_ARGUMENT_SIZE) {
 		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
 
-	bundle *b = bundle_create();
+	b = bundle_create();
 	if (!b) {
 		LOGE("unable to create bundle: %d", errno);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
@@ -866,7 +874,6 @@ int datacontrol_map_set(datacontrol_h provider, const char *key, const char *old
 	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
 	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
 
-	const char *arg_list[4];
 	arg_list[0] = provider->data_id;
 	arg_list[1] = key;
 	arg_list[2] = old_value;
@@ -875,10 +882,10 @@ int datacontrol_map_set(datacontrol_h provider, const char *key, const char *old
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 4);
 
 	/* Set the request id */
-	int reqId = _datacontrol_create_request_id();
+	reqId = _datacontrol_create_request_id();
 	*request_id = reqId;
 
-	int ret = __map_request_provider(provider, DATACONTROL_TYPE_MAP_SET, b, reqId);
+	ret = __map_request_provider(provider, DATACONTROL_TYPE_MAP_SET, b, reqId);
 	bundle_free(b);
 
 	return ret;
@@ -886,6 +893,12 @@ int datacontrol_map_set(datacontrol_h provider, const char *key, const char *old
 
 int datacontrol_map_add(datacontrol_h provider, const char *key, const char *value, int *request_id)
 {
+	unsigned int arg_size;
+	bundle *b;
+	const char *arg_list[3];
+	int reqId;
+	int ret;
+
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL || key == NULL || value == NULL) {
 		LOGE("Invalid parameter");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -893,13 +906,13 @@ int datacontrol_map_add(datacontrol_h provider, const char *key, const char *val
 
 	LOGI("Adds the value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
-	unsigned int arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
+	arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
 	if (arg_size > MAX_ARGUMENT_SIZE) {
 		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
 
-	bundle *b = bundle_create();
+	b = bundle_create();
 	if (!b) {
 		LOGE("unable to create bundle: %d", errno);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
@@ -908,7 +921,6 @@ int datacontrol_map_add(datacontrol_h provider, const char *key, const char *val
 	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
 	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
 
-	const char *arg_list[3];
 	arg_list[0] = provider->data_id;
 	arg_list[1] = key;
 	arg_list[2] = value;
@@ -916,10 +928,10 @@ int datacontrol_map_add(datacontrol_h provider, const char *key, const char *val
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 3);
 
 	/* Set the request id */
-	int reqId = _datacontrol_create_request_id();
+	reqId = _datacontrol_create_request_id();
 	*request_id = reqId;
 
-	int ret = __map_request_provider(provider, DATACONTROL_TYPE_MAP_ADD, b, reqId);
+	ret = __map_request_provider(provider, DATACONTROL_TYPE_MAP_ADD, b, reqId);
 	bundle_free(b);
 
 	return ret;
@@ -927,6 +939,12 @@ int datacontrol_map_add(datacontrol_h provider, const char *key, const char *val
 
 int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *value, int *request_id)
 {
+	unsigned int arg_size;
+	bundle *b;
+	const char *arg_list[3];
+	int reqId;
+	int ret;
+
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL || key == NULL || value == NULL) {
 		LOGE("Invalid parameter");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -934,13 +952,13 @@ int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *
 
 	LOGI("Removes the value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
-	unsigned int arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
+	arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
 	if (arg_size > MAX_ARGUMENT_SIZE) {
 		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
 
-	bundle *b = bundle_create();
+	b = bundle_create();
 	if (!b) {
 		LOGE("unable to create bundle: %d", errno);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
@@ -949,7 +967,6 @@ int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *
 	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
 	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
 
-	const char *arg_list[3];
 	arg_list[0] = provider->data_id;
 	arg_list[1] = key;
 	arg_list[2] = value;
@@ -957,11 +974,12 @@ int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 3);
 
 	/* Set the request id */
-	int reqId = _datacontrol_create_request_id();
+	reqId = _datacontrol_create_request_id();
 	*request_id = reqId;
 
-	int ret = __map_request_provider(provider, DATACONTROL_TYPE_MAP_REMOVE, b, reqId);
+	ret = __map_request_provider(provider, DATACONTROL_TYPE_MAP_REMOVE, b, reqId);
 	bundle_free(b);
 
 	return ret;
 }
+

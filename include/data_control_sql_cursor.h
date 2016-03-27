@@ -1,18 +1,19 @@
-//
-// Copyright (c) 2013 Samsung Electronics Co., Ltd.
-//
-// Licensed under the Apache License, Version 2.0 (the License);
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at:
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
+/*
+ * Copyright (c) 2013 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 
 #ifndef __TIZEN_APPFW_DATA_CONTROL_SQL_ENUMERATOR_H_
 #define __TIZEN_APPFW_DATA_CONTROL_SQL_ENUMERATOR_H_
@@ -211,7 +212,7 @@ int data_control_sql_get_column_item_size(result_set_cursor cursor, int column_i
  * @retval #DATA_CONTROL_ERROR_IO_ERROR I/O error
  * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
  */
-int data_control_sql_get_column_item_type(result_set_cursor cursor, int column_index, data_control_sql_column_type_e* type);
+int data_control_sql_get_column_item_type(result_set_cursor cursor, int column_index, data_control_sql_column_type_e *type);
 
 /**
  * @brief  Gets a blob data from the column indicated by the specified index.

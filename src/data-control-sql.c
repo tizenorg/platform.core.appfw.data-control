@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2014 Samsung Electronics Co., Ltd All Rights Reserved
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
 #include <dlog.h>
 #include <errno.h>
 #include <search.h>
@@ -43,16 +60,20 @@ typedef struct {
 
 static void *datacontrol_sql_tree_root = NULL;
 static GHashTable *__socket_pair_hash = NULL;
-static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *cursor);
+static int __recv_sql_select_process(bundle *kb, int fd,
+		resultset_cursor *cursor);
 
-static void __sql_call_cb(const char *provider_id, int request_id, datacontrol_request_type type,
-		const char *data_id, bool provider_result, const char *error, long long insert_rowid, resultset_cursor *cursor, void *data)
+static void __sql_call_cb(const char *provider_id, int request_id,
+		datacontrol_request_type type, const char *data_id,
+		bool provider_result, const char *error, long long insert_rowid,
+		resultset_cursor *cursor, void *data)
 {
+	datacontrol_sql_response_cb *callback = NULL;
+	sql_response_cb_s *sql_dc;
+	datacontrol_h provider;
+
 	LOGI("__sql_call_cb, dataID !!!: %s", data_id);
 
-	datacontrol_sql_response_cb *callback = NULL;
-
-	sql_response_cb_s *sql_dc = NULL;
 	sql_dc = (sql_response_cb_s *)data;
 	callback = sql_dc->sql_response_cb;
 	if (!callback) {
@@ -60,15 +81,12 @@ static void __sql_call_cb(const char *provider_id, int request_id, datacontrol_r
 		return;
 	}
 
-	datacontrol_h provider;
 	datacontrol_sql_create(&provider);
-
 	datacontrol_sql_set_provider_id(provider, provider_id);
 	datacontrol_sql_set_data_id(provider, data_id);
 
 	switch (type) {
 	case DATACONTROL_TYPE_SQL_SELECT:
-	{
 		LOGI("SELECT");
 		if (callback != NULL && callback->select != NULL)
 			callback->select(request_id, provider, cursor, provider_result, error, sql_dc->user_data);
@@ -76,9 +94,7 @@ static void __sql_call_cb(const char *provider_id, int request_id, datacontrol_r
 			LOGI("No registered callback function");
 
 		break;
-	}
 	case DATACONTROL_TYPE_SQL_INSERT:
-	{
 		LOGI("INSERT row_id: %lld", insert_rowid);
 		if (callback != NULL && callback->insert != NULL)
 			callback->insert(request_id, provider, insert_rowid, provider_result, error, sql_dc->user_data);
@@ -86,25 +102,20 @@ static void __sql_call_cb(const char *provider_id, int request_id, datacontrol_r
 			LOGI("No registered callback function");
 
 		break;
-	}
 	case DATACONTROL_TYPE_SQL_UPDATE:
-	{
 		LOGI("UPDATE");
 		if (callback != NULL && callback->update != NULL)
 			callback->update(request_id, provider, provider_result, error, sql_dc->user_data);
 		else
 			LOGI("No registered callback function");
 		break;
-	}
 	case DATACONTROL_TYPE_SQL_DELETE:
-	{
 		LOGI("DELETE");
 		if (callback != NULL && callback->delete != NULL)
 			callback->delete(request_id, provider, provider_result, error, sql_dc->user_data);
 		else
 			LOGI("No registered callback function");
 		break;
-	}
 	default:
 		break;
 	}
@@ -160,7 +171,6 @@ static int __sql_handle_cb(bundle *b, void *data, int fd, int request_id)
 	const char *p = NULL;
 
 	if (b) {
-
 		/* result list */
 		result_list = appsvc_get_data_array(b, OSP_K_ARG, &result_list_len);
 		if (!result_list) {
@@ -209,9 +219,7 @@ static int __sql_handle_cb(bundle *b, void *data, int fd, int request_id)
 		LOGI("Provider ID: %s, Data ID: %s, Operation type: %d", provider_id, data_id, request_type);
 
 		switch (request_type) {
-
 		case DATACONTROL_TYPE_SQL_SELECT:
-		{
 			if (provider_result) {
 				cursor = datacontrol_sql_get_cursor();
 				if (!cursor) {
@@ -223,9 +231,7 @@ static int __sql_handle_cb(bundle *b, void *data, int fd, int request_id)
 					return DATACONTROL_ERROR_IO_ERROR;
 			}
 			break;
-		}
 		case DATACONTROL_TYPE_SQL_INSERT:
-		{
 			LOGI("INSERT RESPONSE");
 			if (provider_result) {
 				p = result_list[2]; /* result list[2] */
@@ -237,13 +243,10 @@ static int __sql_handle_cb(bundle *b, void *data, int fd, int request_id)
 				insert_rowid = atoll(p);
 			}
 			break;
-		}
 		case DATACONTROL_TYPE_SQL_UPDATE:
 		case DATACONTROL_TYPE_SQL_DELETE:
-		{
 			LOGI("UPDATE or DELETE RESPONSE");
 			break;
-		}
 		default:
 			break;
 		}
@@ -270,7 +273,6 @@ static int __sql_handle_cb(bundle *b, void *data, int fd, int request_id)
 
 static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *cursor)
 {
-
 	int column_count = 0;
 	int column_type = 0;
 	int column_name_len = 0;
@@ -466,7 +468,7 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 			}
 
 			if (size > 0) {
-				value = (void *) malloc(sizeof(void) * size);
+				value = (void *)malloc(sizeof(void) * size);
 				if (value == NULL) {
 					LOGE("Out of mememory");
 					retval = DATACONTROL_ERROR_IO_ERROR;
@@ -508,15 +510,21 @@ out:
 
 	datacontrol_sql_remove_cursor(cursor);
 	return retval;
-
 }
 
 static gboolean __consumer_recv_sql_message(GIOChannel *channel,
-		GIOCondition cond,
-		gpointer data) {
-
+		GIOCondition cond, gpointer data)
+{
 	gint fd = g_io_channel_unix_get_fd(channel);
 	char *buf = NULL;
+	int data_len;
+	guint nb;
+	const char *p = NULL;
+	int request_id;
+	bundle *kb;
+	sql_response_cb_s *sql_dc;
+	GList *itr;
+	datacontrol_consumer_request_info *request_info;
 
 	LOGI("__consumer_recv_sql_message: ...from %d:%s%s%s%s\n", fd,
 			(cond & G_IO_ERR) ? " ERR" : "",
@@ -528,11 +536,6 @@ static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 		goto error;
 
 	if (cond & G_IO_IN) {
-		int data_len;
-		guint nb;
-		const char *p = NULL;
-		int request_id;
-
 		if (_read_socket(fd, (char *)&data_len, sizeof(data_len), &nb) != DATACONTROL_ERROR_NONE)
 			goto error;
 		LOGI("data_len : %d", data_len);
@@ -542,7 +545,6 @@ static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 			goto error;
 		}
 		if (data_len > 0) {
-			bundle *kb = NULL;
 			buf = (char *)calloc(data_len + 1, sizeof(char));
 			if (buf == NULL) {
 				LOGE("Out of memory.");
@@ -591,12 +593,12 @@ error:
 	if (((sql_response_cb_s *)data) != NULL) {
 		LOGE("g_hash_table_remove");
 
-		sql_response_cb_s *sql_dc = (sql_response_cb_s *)data;
+		sql_dc = (sql_response_cb_s *)data;
 		g_hash_table_remove(__socket_pair_hash, sql_dc->provider_id);
 
-		GList *itr = g_list_first(sql_dc->request_info_list);
+		itr = g_list_first(sql_dc->request_info_list);
 		while (itr != NULL) {
-			datacontrol_consumer_request_info *request_info = (datacontrol_consumer_request_info *)itr->data;
+			request_info = (datacontrol_consumer_request_info *)itr->data;
 			__sql_call_cb(sql_dc->provider_id, request_info->request_id, request_info->type, sql_dc->data_id, false,
 					"provider IO Error", -1, NULL, data);
 			itr = g_list_next(itr);
@@ -613,8 +615,6 @@ error:
 
 int __datacontrol_send_sql_async(int sockfd, bundle *kb, bundle *extra_kb, datacontrol_request_type type, void *data)
 {
-
-	LOGE("send async ~~~");
 	bundle_raw *kb_data = NULL;
 	bundle_raw *extra_kb_data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
@@ -623,6 +623,8 @@ int __datacontrol_send_sql_async(int sockfd, bundle *kb, bundle *extra_kb, datac
 	char *buf = NULL;
 	int total_len = 0;
 	unsigned int nb = 0;
+
+	LOGE("send async ~~~");
 
 	bundle_encode_raw(kb, &kb_data, &datalen);
 	if (kb_data == NULL) {
@@ -676,17 +678,26 @@ out:
 
 static int __sql_request_provider(datacontrol_h provider, datacontrol_request_type type, bundle *request_data, bundle *extra_kb, int request_id)
 {
-	LOGI("SQL Data control request, type: %d, request id: %d", type, request_id);
-
 	char *app_id = NULL;
 	void *data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
+	sql_response_cb_s *sql_dc_temp;
+	void *sql_dc_returned = NULL;
+	char caller_app_id[255];
+	char datacontrol_request_operation[MAX_LEN_DATACONTROL_REQ_TYPE] = {0, };
+	char req_id[32] = {0, };
+	int count = 0;
+	const int TRY_COUNT = 2;
+	const struct timespec TRY_SLEEP_TIME = { 0, 1000 * 1000 * 1000 };
+	char *socket_info_key;
+
+
+	LOGI("SQL Data control request, type: %d, request id: %d", type, request_id);
 
 	if (__socket_pair_hash == NULL)
 		__socket_pair_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free, _socket_info_free);
 
 	if ((int)type <= (int)DATACONTROL_TYPE_SQL_DELETE) {
-
 		if ((int)type < (int)DATACONTROL_TYPE_SQL_SELECT) {
 			LOGE("invalid request type: %d", (int)type);
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -697,7 +708,7 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
 		}
 
-		sql_response_cb_s *sql_dc_temp = (sql_response_cb_s *)calloc(1, sizeof(sql_response_cb_s));
+		sql_dc_temp = (sql_response_cb_s *)calloc(1, sizeof(sql_response_cb_s));
 		if (!sql_dc_temp) {
 			LOGE("failed to create sql datacontrol");
 			return DATACONTROL_ERROR_OUT_OF_MEMORY;
@@ -723,7 +734,6 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 		sql_dc_temp->user_data = NULL;
 		sql_dc_temp->sql_response_cb = NULL;
 
-		void *sql_dc_returned = NULL;
 		sql_dc_returned = tfind(sql_dc_temp, &datacontrol_sql_tree_root, __sql_instance_compare);
 
 		__sql_instance_free(sql_dc_temp);
@@ -746,7 +756,6 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 		LOGI("SQL datacontrol appid: %s", sql_dc->app_id);
 	}
 
-	char caller_app_id[255];
 	pid_t pid = getpid();
 	if (aul_app_get_appid_bypid(pid, caller_app_id, sizeof(caller_app_id)) != 0) {
 		LOGE("Failed to get appid by pid(%d).", pid);
@@ -756,17 +765,11 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 	bundle_add_str(request_data, OSP_K_DATACONTROL_PROTOCOL_VERSION, OSP_V_VERSION_2_1_0_3);
 	bundle_add_str(request_data, AUL_K_CALLER_APPID, caller_app_id);
 
-	char datacontrol_request_operation[MAX_LEN_DATACONTROL_REQ_TYPE] = {0, };
 	snprintf(datacontrol_request_operation, MAX_LEN_DATACONTROL_REQ_TYPE, "%d", (int)(type));
 	bundle_add_str(request_data, OSP_K_DATACONTROL_REQUEST_TYPE, datacontrol_request_operation);
 
-	char req_id[32] = {0, };
 	snprintf(req_id, 32, "%d", request_id);
 	bundle_add_str(request_data, OSP_K_REQUEST_ID, req_id);
-
-	int count = 0;
-	const int TRY_COUNT = 2;
-	const struct timespec TRY_SLEEP_TIME = { 0, 1000 * 1000 * 1000 };
 
 	do {
 		datacontrol_socket_info *socket_info = g_hash_table_lookup(__socket_pair_hash, provider->provider_id);
@@ -784,7 +787,7 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 				return DATACONTROL_ERROR_IO_ERROR;
 			}
 
-			char *socket_info_key = strdup(provider->provider_id);
+			socket_info_key = strdup(provider->provider_id);
 			if (socket_info_key == NULL) {
 				LOGE("Out of memory. can not dup select map file.");
 				return DATACONTROL_ERROR_IO_ERROR;
@@ -804,7 +807,6 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 	} while (ret != DATACONTROL_ERROR_NONE && count < TRY_COUNT);
 
 	return ret;
-
 }
 
 int datacontrol_sql_create(datacontrol_h *provider)
@@ -867,8 +869,9 @@ int datacontrol_sql_get_provider_id(datacontrol_h provider, char **provider_id)
 		if (*provider_id == NULL)
 			return DATACONTROL_ERROR_OUT_OF_MEMORY;
 
-	} else
+	} else {
 		*provider_id = NULL;
+	}
 
 	return 0;
 }
@@ -907,10 +910,11 @@ int datacontrol_sql_get_data_id(datacontrol_h provider, char **data_id)
 
 int datacontrol_sql_register_response_cb(datacontrol_h provider, datacontrol_sql_response_cb *callback, void *user_data)
 {
-
 	int ret = 0;
 	char *app_id = NULL;
 	char *access = NULL;
+	void *sql_dc_returned = NULL;
+	sql_response_cb_s *sql_dc;
 
 	ret = pkgmgrinfo_appinfo_usr_get_datacontrol_info(provider->provider_id, "Sql", getuid(), &app_id, &access);
 	if (ret != PMINFO_R_OK) {
@@ -946,10 +950,9 @@ int datacontrol_sql_register_response_cb(datacontrol_h provider, datacontrol_sql
 	sql_dc_temp->user_data = user_data;
 	sql_dc_temp->sql_response_cb = callback;
 
-	void *sql_dc_returned = NULL;
 	sql_dc_returned = tsearch(sql_dc_temp, &datacontrol_sql_tree_root, __sql_instance_compare);
 
-	sql_response_cb_s *sql_dc = *(sql_response_cb_s **)sql_dc_returned;
+	sql_dc = *(sql_response_cb_s **)sql_dc_returned;
 	if (sql_dc != sql_dc_temp) {
 		sql_dc->sql_response_cb = callback;
 		sql_dc->user_data = user_data;
@@ -978,8 +981,9 @@ EXCEPTION:
 
 int datacontrol_sql_unregister_response_cb(datacontrol_h provider)
 {
-
 	int ret = DATACONTROL_ERROR_NONE;
+	void *sql_dc_returned = NULL;
+
 	LOGE("g_hash_table_remove");
 
 	g_hash_table_remove(__socket_pair_hash, provider->provider_id);
@@ -999,7 +1003,6 @@ int datacontrol_sql_unregister_response_cb(datacontrol_h provider)
 		goto EXCEPTION;
 	}
 
-	void *sql_dc_returned = NULL;
 	sql_dc_returned = tdelete(sql_dc_temp, &datacontrol_sql_tree_root, __sql_instance_compare);
 	if (sql_dc_returned == NULL) {
 		LOGE("invalid parameter");
@@ -1015,12 +1018,11 @@ EXCEPTION:
 	}
 
 	return ret;
-
 }
 
 static void bundle_foreach_check_arg_size_cb(const char *key, const int type,
-		const bundle_keyval_t *kv, void *arg_size) {
-
+		const bundle_keyval_t *kv, void *arg_size)
+{
 	char *value = NULL;
 	size_t value_len = 0;
 	bundle_keyval_get_basic_val((bundle_keyval_t *)kv, (void **)&value, &value_len);
@@ -1031,6 +1033,13 @@ static void bundle_foreach_check_arg_size_cb(const char *key, const int type,
 
 int datacontrol_sql_insert(datacontrol_h provider, const bundle *insert_data, int *request_id)
 {
+	int ret = 0;
+	long long arg_size = 0;
+	const char *arg_list[2];
+	bundle *b;
+	char insert_column_count[MAX_LEN_DATACONTROL_COLUMN_COUNT] = {0, };
+	int count;
+
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL || insert_data == NULL) {
 		LOGE("Invalid parameter");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -1038,10 +1047,7 @@ int datacontrol_sql_insert(datacontrol_h provider, const bundle *insert_data, in
 
 	LOGI("SQL data control, insert to provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
-	int ret = 0;
-
 	/* Check size of arguments */
-	long long arg_size = 0;
 	bundle_foreach((bundle *)insert_data, bundle_foreach_check_arg_size_cb, &arg_size);
 	arg_size += strlen(provider->data_id) * sizeof(wchar_t);
 	if (arg_size > MAX_REQUEST_ARGUMENT_SIZE) {
@@ -1049,7 +1055,7 @@ int datacontrol_sql_insert(datacontrol_h provider, const bundle *insert_data, in
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
 
-	bundle *b = bundle_create();
+	b = bundle_create();
 	if (!b)	{
 		LOGE("unable to create bundle: %d", errno);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
@@ -1058,8 +1064,7 @@ int datacontrol_sql_insert(datacontrol_h provider, const bundle *insert_data, in
 	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
 	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
 
-	char insert_column_count[MAX_LEN_DATACONTROL_COLUMN_COUNT] = {0, };
-	int count = bundle_get_count((bundle *)insert_data);
+	count = bundle_get_count((bundle *)insert_data);
 	ret = snprintf(insert_column_count, MAX_LEN_DATACONTROL_COLUMN_COUNT, "%d", count);
 	if (ret < 0) {
 		LOGE("unable to convert insert column count to string: %d", errno);
@@ -1067,7 +1072,6 @@ int datacontrol_sql_insert(datacontrol_h provider, const bundle *insert_data, in
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
 	}
 
-	const char *arg_list[2];
 	arg_list[0] = provider->data_id;
 	arg_list[1] = insert_column_count;
 
@@ -1084,13 +1088,17 @@ int datacontrol_sql_insert(datacontrol_h provider, const bundle *insert_data, in
 
 int datacontrol_sql_delete(datacontrol_h provider, const char *where, int *request_id)
 {
+	const char *arg_list[2];
+	int reqId;
+	int ret;
+	bundle *b;
 
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL) {
 		LOGE("Invalid parameter");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *b = bundle_create();
+	b = bundle_create();
 	if (!b) {
 		LOGE("unable to create bundle: %d", errno);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
@@ -1099,7 +1107,6 @@ int datacontrol_sql_delete(datacontrol_h provider, const char *where, int *reque
 	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
 	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
 
-	const char *arg_list[2];
 	arg_list[0] = provider->data_id;
 
 	if (where)
@@ -1110,21 +1117,33 @@ int datacontrol_sql_delete(datacontrol_h provider, const char *where, int *reque
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, 2);
 
 	/* Set the request id */
-	int reqId = _datacontrol_create_request_id();
+	reqId = _datacontrol_create_request_id();
 	*request_id = reqId;
 
-	int ret = __sql_request_provider(provider, DATACONTROL_TYPE_SQL_DELETE, b, NULL, reqId);
+	ret = __sql_request_provider(provider, DATACONTROL_TYPE_SQL_DELETE, b, NULL, reqId);
 	bundle_free(b);
 	return ret;
 }
 
 int datacontrol_sql_select(datacontrol_h provider, char **column_list, int column_count,
-		const char *where, const char *order, int *request_id) {
+		const char *where, const char *order, int *request_id)
+{
 	return datacontrol_sql_select_with_page(provider, column_list, column_count, where, order, 1, 20, request_id);
 }
 
 int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list, int column_count,
-		const char *where, const char *order, int page_number, int count_per_page, int *request_id) {
+		const char *where, const char *order, int page_number, int count_per_page, int *request_id)
+{
+	int total_arg_count = -1;
+	int ret = 0;
+	bundle *b;
+	char page[32] = {0, };
+	char count_per_page_no[32] = {0, };
+	const char **arg_list;
+	int i;
+	char select_column_count[MAX_LEN_DATACONTROL_COLUMN_COUNT] = {0, };
+	int select_col;
+	int reqId;
 
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL) {
 		LOGE("Invalid parameter");
@@ -1138,10 +1157,7 @@ int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list,
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	int total_arg_count = -1;
-	int ret = 0;
-
-	bundle *b = bundle_create();
+	b = bundle_create();
 	if (!b) {
 		LOGE("unable to create bundle: %d", errno);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
@@ -1150,7 +1166,6 @@ int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list,
 	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
 	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
 
-	char page[32] = {0, };
 	ret = snprintf(page, 32, "%d", page_number);
 	if (ret < 0) {
 		LOGE("unable to convert page no to string: %d", errno);
@@ -1158,7 +1173,6 @@ int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list,
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
 	}
 
-	char count_per_page_no[32] = {0, };
 	ret = snprintf(count_per_page_no, 32, "%d", count_per_page);
 	if (ret < 0) {
 		LOGE("unable to convert count per page no to string: %d", errno);
@@ -1167,14 +1181,13 @@ int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list,
 	}
 
 	total_arg_count = column_count + DATACONTROL_SELECT_EXTRA_COUNT;
-	const char **arg_list = (const char **)malloc(total_arg_count * (sizeof(char *)));
+	arg_list = (const char **)malloc(total_arg_count * (sizeof(char *)));
 
 	LOGI("total arg count %d", total_arg_count);
 
 	arg_list[0] = provider->data_id; /* arg[0]: data ID */
-	int i = 1;
+	i = 1;
 	if (column_list) {
-		char select_column_count[MAX_LEN_DATACONTROL_COLUMN_COUNT] = {0, };
 		ret = snprintf(select_column_count, MAX_LEN_DATACONTROL_COLUMN_COUNT, "%d", column_count);
 		if (ret < 0) {
 			LOGE("unable to convert select col count to string: %d", errno);
@@ -1187,10 +1200,9 @@ int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list,
 		arg_list[i] = select_column_count; /* arg[1]: selected column count */
 
 		++i;
-		int select_col = 0;
+		select_col = 0;
 		while (select_col < column_count)
 			arg_list[i++] = column_list[select_col++];
-
 	}
 
 	if (where)	/* arg: where clause */
@@ -1210,7 +1222,7 @@ int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list,
 	bundle_add_str_array(b, OSP_K_ARG, arg_list, total_arg_count);
 	free(arg_list);
 
-	int reqId = _datacontrol_create_request_id();
+	reqId = _datacontrol_create_request_id();
 	*request_id = reqId;
 
 	ret = __sql_request_provider(provider, DATACONTROL_TYPE_SQL_SELECT, b, NULL, reqId);
@@ -1218,19 +1230,21 @@ int datacontrol_sql_select_with_page(datacontrol_h provider, char **column_list,
 	return ret;
 }
 
-
 int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, const char *where, int *request_id)
 {
+	int ret = 0;
+	long long arg_size = 0;
+	bundle *b;
+	char update_column_count[MAX_LEN_DATACONTROL_COLUMN_COUNT] = {0, };
+	int count;
+	const char *arg_list[4];
 
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL || update_data == NULL || where == NULL) {
 		LOGE("Invalid parameter");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	int ret = 0;
-
 	/* Check size of arguments */
-	long long arg_size = 0;
 	bundle_foreach((bundle *)update_data, bundle_foreach_check_arg_size_cb, &arg_size);
 	arg_size += strlen(provider->data_id) * sizeof(wchar_t);
 	if (arg_size > MAX_REQUEST_ARGUMENT_SIZE) {
@@ -1238,7 +1252,7 @@ int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, co
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
 
-	bundle *b = bundle_create();
+	b = bundle_create();
 	if (!b)	{
 		LOGE("unable to create bundle: %d", errno);
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
@@ -1247,8 +1261,6 @@ int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, co
 	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
 	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
 
-	char update_column_count[MAX_LEN_DATACONTROL_COLUMN_COUNT] = {0, };
-	int count = bundle_get_count((bundle *)update_data);
 	ret = snprintf(update_column_count, MAX_LEN_DATACONTROL_COLUMN_COUNT, "%d", count);
 	if (ret < 0) {
 		LOGE("unable to convert update col count to string: %d", errno);
@@ -1256,7 +1268,6 @@ int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, co
 		return DATACONTROL_ERROR_OUT_OF_MEMORY;
 	}
 
-	const char *arg_list[4];
 	arg_list[0] = provider->data_id; /* list(0): data ID */
 	arg_list[1] = update_column_count;
 	arg_list[2] = where;
@@ -1268,3 +1279,4 @@ int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, co
 	bundle_free(b);
 	return ret;
 }
+

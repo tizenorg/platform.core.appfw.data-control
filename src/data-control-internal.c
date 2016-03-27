@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2013 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <dlog.h>
 #include <errno.h>
 #include <stdio.h>
@@ -41,14 +57,11 @@ int _consumer_request_compare_cb(gconstpointer a, gconstpointer b)
 	return 1;
 }
 
-int _write_socket(int fd,
-		void *buffer,
-		unsigned int nbytes,
-		unsigned int *bytes_write) {
-
+int _write_socket(int fd, void *buffer, unsigned int nbytes,
+		unsigned int *bytes_write)
+{
 	unsigned int left = nbytes;
 	gsize nb;
-
 	int retry_cnt = 0;
 
 	*bytes_write = 0;
@@ -75,14 +88,11 @@ int _write_socket(int fd,
 	return DATACONTROL_ERROR_NONE;
 }
 
-int _read_socket(int fd,
-		char *buffer,
-		unsigned int nbytes,
-		unsigned int *bytes_read) {
-
+int _read_socket(int fd, char *buffer, unsigned int nbytes,
+		unsigned int *bytes_read)
+{
 	unsigned int left = nbytes;
 	gsize nb;
-
 	int retry_cnt = 0;
 
 	*bytes_read = 0;
@@ -110,11 +120,14 @@ int _read_socket(int fd,
 	return DATACONTROL_ERROR_NONE;
 }
 
-char *_datacontrol_create_select_statement(char *data_id, const char **column_list, int column_count,
-		const char *where, const char *order, int page_number, int count_per_page)
+char *_datacontrol_create_select_statement(char *data_id,
+		const char **column_list, int column_count,
+		const char *where, const char *order, int page_number,
+		int count_per_page)
 {
 	char *column = calloc(MAX_COLUMN_SIZE, sizeof(char));
 	int i = 0;
+	char *statement;
 
 	while (i < column_count - 1) {
 		LOGI("column i = %d, %s", i, column_list[i]);
@@ -125,7 +138,7 @@ char *_datacontrol_create_select_statement(char *data_id, const char **column_li
 
 	strncat(column, column_list[i], MAX_COLUMN_SIZE - (strlen(column) + 1));
 
-	char *statement = calloc(MAX_STATEMENT_SIZE, sizeof(char));
+	statement = calloc(MAX_STATEMENT_SIZE, sizeof(char));
 	snprintf(statement, MAX_STATEMENT_SIZE, "SELECT %s * FROM %s WHERE %s ORDER BY %s", column,
 			data_id, where, order);
 
@@ -166,11 +179,13 @@ void _socket_info_free(gpointer socket)
 
 }
 
-datacontrol_socket_info *_get_socket_info(const char *caller_id, const char *callee_id, const char *type,
-		GIOFunc cb, void *data)
+datacontrol_socket_info *_get_socket_info(const char *caller_id,
+		const char *callee_id, const char *type, GIOFunc cb, void *data)
 {
 	char err_buf[ERR_BUFFER_SIZE];
 	int socketpair = 0;
+	int g_src_id;
+
 	datacontrol_socket_info *socket_info = NULL;
 	bundle *sock_bundle = bundle_create();
 	bundle_add_str(sock_bundle, AUL_K_CALLER_APPID, caller_id);
@@ -190,9 +205,8 @@ datacontrol_socket_info *_get_socket_info(const char *caller_id, const char *cal
 			return NULL;
 		}
 
-		int g_src_id = g_io_add_watch(gio_read, G_IO_IN | G_IO_HUP,
+		g_src_id = g_io_add_watch(gio_read, G_IO_IN | G_IO_HUP,
 				cb, data);
-
 		if (g_src_id == 0) {
 			g_io_channel_unref(gio_read);
 			LOGE("fail to add watch on socket");
@@ -219,7 +233,6 @@ datacontrol_socket_info *_get_socket_info(const char *caller_id, const char *cal
 
 int _request_appsvc_run(const char *caller_id, const char *callee_id)
 {
-
 	int pid = -1;
 	int count = 0;
 	const int TRY_COUNT = 4;
@@ -244,14 +257,11 @@ int _request_appsvc_run(const char *caller_id, const char *callee_id)
 	bundle_add_str(arg_list, AUL_K_DATA_CONTROL_TYPE, "CORE");
 
 	do {
-
 		pid = appsvc_run_service(arg_list, 0, NULL, NULL);
-
 		if (pid >= 0) {
 			LOGI("Launch the provider app successfully: %d", pid);
 			bundle_free(arg_list);
 			break;
-
 		} else if (pid == APPSVC_RET_EINVAL) {
 			LOGE("not able to launch service: %d", pid);
 			bundle_free(arg_list);
@@ -267,7 +277,7 @@ int _request_appsvc_run(const char *caller_id, const char *callee_id)
 		LOGE("unable to launch service: %d", pid);
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
-	return DATACONTROL_ERROR_NONE;
 
+	return DATACONTROL_ERROR_NONE;
 }
 

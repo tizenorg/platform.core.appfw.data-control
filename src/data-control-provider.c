@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2013 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <dlog.h>
 #include <errno.h>
 #include <search.h>
@@ -61,7 +77,7 @@ struct datacontrol_s {
 };
 
 
-typedef int (*provider_handler_cb) (bundle *b, int request_id, void *data);
+typedef int (*provider_handler_cb)(bundle *b, int request_id, void *data);
 
 static datacontrol_provider_sql_cb *provider_sql_cb = NULL;
 static datacontrol_provider_map_cb *provider_map_cb = NULL;
@@ -91,9 +107,6 @@ static int __provider_new_request_id(void)
 
 static int __send_select_result(int fd, bundle *b, void *data)
 {
-
-	LOGI("__send_select_result");
-
 	/*
 	 In this function, the result set is written in socket as specific form.
 	 [sizeof(int)] column count
@@ -115,7 +128,19 @@ static int __send_select_result(int fd, bundle *b, void *data)
 	sqlite3_int64 offset_idx = 0;
 	sqlite3_int64 row_count = 0;
 	unsigned int nb = 0;
+	int type;
+	int column_name_len;
+	const char *page_number_str;
+	int size = 0;
+	void *value = NULL;
+	int column_type;
+	long long tmp_long = 0;
+	double tmp_double = 0.0;
+	void *buf = NULL;
+	int buf_len = 0;
+	const char *count_per_page_str;
 
+	LOGI("__send_select_result");
 	if (b == NULL || data == NULL) {
 		LOGE("The input param is invalid.");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -153,7 +178,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 	 #define SQLITE_NULL	5
 	*/
 	for (i = 0; i < column_count; i++) {
-		int type = sqlite3_column_type(state, i);
+		type = sqlite3_column_type(state, i);
 		if (_write_socket(fd, &type, sizeof(int), &nb) != DATACONTROL_ERROR_NONE) {
 			LOGI("Writing a type to a file descriptor is failed.");
 			return DATACONTROL_ERROR_IO_ERROR;
@@ -168,7 +193,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 			LOGI("sqlite3_column_name is failed. errno = %d", errno);
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
 		} else {
-			int column_name_len = strlen(column_name) + 1;
+			column_name_len = strlen(column_name) + 1;
 			if (_write_socket(fd, &column_name_len, sizeof(int), &nb) != DATACONTROL_ERROR_NONE) {
 				LOGI("Writing a column_name_len to a file descriptor is failed. errno = %d", errno);
 				return DATACONTROL_ERROR_IO_ERROR;
@@ -193,9 +218,8 @@ static int __send_select_result(int fd, bundle *b, void *data)
 
 	LOGI("Writing a total_len_of_column_names %d", total_len_of_column_names);
 
-
-	const char *page_number_str = bundle_get_val(b, RESULT_PAGE_NUMBER);
-	const char *count_per_page_str = bundle_get_val(b, MAX_COUNT_PER_PAGE);
+	page_number_str = bundle_get_val(b, RESULT_PAGE_NUMBER);
+	count_per_page_str = bundle_get_val(b, MAX_COUNT_PER_PAGE);
 
 	LOGI("page_number: %s, per_page: %s", page_number_str, count_per_page_str);
 
@@ -252,14 +276,8 @@ static int __send_select_result(int fd, bundle *b, void *data)
 		if (offset_idx > offset) {
 			++row_count;
 			for (i = 0; i < column_count; ++i) {
-				int type = 0;
-				int size = 0;
-				void *value = NULL;
-				int column_type = sqlite3_column_type(state, i);
-				long long tmp_long = 0;
-				double tmp_double = 0.0;
-				void *buf = NULL;
-				int buf_len = 0;
+				column_type = sqlite3_column_type(state, i);
+
 				switch (column_type) {
 				case SQLITE_INTEGER:
 					type = 1;
@@ -343,22 +361,21 @@ static int _get_int_from_str(const char *str)
 
 static int __send_get_value_result(int fd, bundle *b, void *data)
 {
-
 	int i = 0;
 	char **value_list = (char **)data;
-
 	const char *page_num_str = bundle_get_val(b, RESULT_PAGE_NUMBER);
 	const char *count_per_page_str = bundle_get_val(b, MAX_COUNT_PER_PAGE);
 	const char *value_count_str = bundle_get_val(b, RESULT_VALUE_COUNT);
-
-	LOGI("page num: %s, count_per_page: %s, value_count %s", page_num_str, count_per_page_str, value_count_str);
-
 	int page_number = 0;
 	int count_per_page = 0;
 	int value_count = 0;
 	int current_offset = 0;
 	int remain_count = 0;
 	unsigned int nb;
+	int add_value_count;
+	int length;
+
+	LOGI("page num: %s, count_per_page: %s, value_count %s", page_num_str, count_per_page_str, value_count_str);
 
 	page_number = _get_int_from_str(page_num_str);
 	count_per_page = _get_int_from_str(count_per_page_str);
@@ -368,7 +385,7 @@ static int __send_get_value_result(int fd, bundle *b, void *data)
 	remain_count = value_count - current_offset;
 	remain_count = (remain_count > 0) ? remain_count : 0;	/* round off to zero if the negative num is found */
 
-	int add_value_count = (count_per_page > remain_count) ? remain_count : count_per_page;
+	add_value_count = (count_per_page > remain_count) ? remain_count : count_per_page;
 
 	LOGI("add_value_count: %d, current_offset: %d, remain_count %d", add_value_count, current_offset, remain_count);
 
@@ -380,7 +397,7 @@ static int __send_get_value_result(int fd, bundle *b, void *data)
 	add_value_count += current_offset;
 
 	for (i = current_offset; i < add_value_count; i++) {
-		int length = strlen(value_list[i]);
+		length = strlen(value_list[i]);
 		LOGI("length = %d", length);
 		if (_write_socket(fd, &length, sizeof(int), &nb) != DATACONTROL_ERROR_NONE) {
 			LOGE("Writing a length to a file descriptor is failed. errno = %d", errno);
@@ -398,14 +415,14 @@ static int __send_get_value_result(int fd, bundle *b, void *data)
 
 int __datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type type, void *data)
 {
-	LOGI("send async ~~~");
-
 	bundle_raw *kb_data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
 	int datalen = 0;
 	char *buf = NULL;
 	int total_len = 0;
 	unsigned int nb = 0;
+
+	LOGI("send async ~~~");
 
 	bundle_encode_raw(kb, &kb_data, &datalen);
 	if (kb_data == NULL) {
@@ -444,8 +461,10 @@ static bundle *__get_data_sql(int fd)
 {
 	bundle *b = bundle_create();
 	int len = 0;
+	int ret;
+	char *buf;
 
-	int ret = read(fd, &len, sizeof(int));
+	ret = read(fd, &len, sizeof(int));
 	if (ret < sizeof(int)) {
 		LOGE("read error :%d", ret);
 		if (b)
@@ -454,7 +473,7 @@ static bundle *__get_data_sql(int fd)
 	}
 
 	if (len > 0) {
-		char *buf = (char *)calloc(len, sizeof(char));
+		buf = (char *)calloc(len, sizeof(char));
 		if (buf == NULL) {
 			LOGE("calloc fail");
 			if (b)
@@ -474,22 +493,30 @@ static bundle *__get_data_sql(int fd)
 
 		if (buf)
 			free(buf);
-	} else
+	} else {
 		LOGE("__get_data_sql read count : %d", len);
+	}
 
 	return b;
 }
 
 static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data)
 {
-
 	bundle *res = bundle_create();
 
 	/* Set the type */
 	char type_str[MAX_LEN_DATACONTROL_REQ_TYPE] = {0,};
+	const char *request_type;
+	const char *provider_id;
+	const char *data_id;
+	const char *request_id;
+	const char *caller_appid;
+	const char *list[3];
+	const char *page_num = bundle_get_val(b, RESULT_PAGE_NUMBER);
+	const char *count_per_page = bundle_get_val(b, MAX_COUNT_PER_PAGE);
 
 	if (type == DATACONTROL_TYPE_UNDEFINED || type == DATACONTROL_TYPE_ERROR) {
-		char *request_type = (char *)bundle_get_val(b, OSP_K_DATACONTROL_REQUEST_TYPE);
+		request_type = bundle_get_val(b, OSP_K_DATACONTROL_REQUEST_TYPE);
 		strncpy(type_str, request_type, MAX_LEN_DATACONTROL_REQ_TYPE);
 		LOGI("type is %s", type_str);
 
@@ -500,31 +527,29 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 	bundle_add_str(res, OSP_K_DATACONTROL_REQUEST_TYPE, type_str);
 
 	/* Set the provider id */
-	char *provider_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_PROVIDER);
+	provider_id = bundle_get_val(b, OSP_K_DATACONTROL_PROVIDER);
 	bundle_add_str(res, OSP_K_DATACONTROL_PROVIDER, provider_id);
 
 	/* Set the data id */
-	char *data_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_DATA);
+	data_id = bundle_get_val(b, OSP_K_DATACONTROL_DATA);
 	bundle_add_str(res, OSP_K_DATACONTROL_DATA, data_id);
 
 	/* Set the caller request id */
-	char *request_id = (char *)bundle_get_val(b, OSP_K_REQUEST_ID);
+	request_id = bundle_get_val(b, OSP_K_REQUEST_ID);
 	bundle_add_str(res, OSP_K_REQUEST_ID, request_id);
 
-	char *caller_appid = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
+	caller_appid = bundle_get_val(b, AUL_K_CALLER_APPID);
 	bundle_add_str(res, AUL_K_CALLER_APPID, caller_appid);
 
 	switch (type) {
 	case DATACONTROL_TYPE_SQL_SELECT:
 	{
-		const char *list[3];
-
 		list[PACKET_INDEX_REQUEST_RESULT] = "1";		/* request result */
 		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
 		list[PACKET_INDEX_SELECT_RESULT_FILE] = DATACONTROL_EMPTY;
 
-		const char *page_num = bundle_get_val(b, RESULT_PAGE_NUMBER);
-		const char *count_per_page = bundle_get_val(b, MAX_COUNT_PER_PAGE);
+		page_num = bundle_get_val(b, RESULT_PAGE_NUMBER);
+		count_per_page = bundle_get_val(b, MAX_COUNT_PER_PAGE);
 
 		LOGI("page num: %s, count_per_page: %s", page_num, count_per_page);
 
@@ -604,7 +629,6 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 
 static int __send_result(bundle *b, datacontrol_request_type type, void *data)
 {
-
 	datacontrol_socket_info *socket_info;
 	char *caller_app_id = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
 	int ret = DATACONTROL_ERROR_NONE;
@@ -823,8 +847,8 @@ err:
 
 gboolean __provider_recv_message(GIOChannel *channel,
 		GIOCondition cond,
-		gpointer data) {
-
+		gpointer data)
+{
 	char *buf = NULL;
 	int data_len;
 	guint nb;
@@ -842,7 +866,6 @@ gboolean __provider_recv_message(GIOChannel *channel,
 		goto error;
 
 	if (cond & G_IO_IN) {
-
 		if (_read_socket(fd, (char *)&data_len, sizeof(data_len), &nb) != DATACONTROL_ERROR_NONE) {
 			LOGE("read socket fail : data_len");
 			goto error;
@@ -898,12 +921,11 @@ error:
 
 int __datacontrol_handler_cb(bundle *b, int request_id, void *data)
 {
-	LOGI("datacontrol_handler_cb");
 	datacontrol_socket_info *socket_info;
-
 	char *caller = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
 	char *callee = (char *)bundle_get_val(b, AUL_K_CALLEE_APPID);
 
+	LOGI("datacontrol_handler_cb");
 	socket_info = g_hash_table_lookup(__socket_pair_hash, caller);
 
 	if (socket_info != NULL)
@@ -988,16 +1010,19 @@ int datacontrol_provider_map_unregister_cb(void)
 
 int datacontrol_provider_get_client_appid(int request_id, char **appid)
 {
+	const char *caller;
+	bundle *b;
+
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
+	b = g_hash_table_lookup(__request_table, &request_id);
 	if (!b) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	const char *caller = bundle_get_val(b, AUL_K_CALLER_APPID);
+	caller = bundle_get_val(b, AUL_K_CALLER_APPID);
 	if (!caller) {
 		LOGE("No appid for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -1012,19 +1037,23 @@ int datacontrol_provider_get_client_appid(int request_id, char **appid)
 
 int datacontrol_provider_send_select_result(int request_id, void *db_handle)
 {
+	int ret;
+	bundle *res;
+	bundle *b;
+
 	LOGI("Send a select result for request id: %d", request_id);
 
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
+	b = g_hash_table_lookup(__request_table, &request_id);
 	if (!b) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_SELECT, db_handle);
-	int ret =  __send_result(res, DATACONTROL_TYPE_SQL_SELECT, db_handle);
+	res = __set_result(b, DATACONTROL_TYPE_SQL_SELECT, db_handle);
+	ret =  __send_result(res, DATACONTROL_TYPE_SQL_SELECT, db_handle);
 	g_hash_table_remove(__request_table, &request_id);
 
 	return ret;
@@ -1032,64 +1061,74 @@ int datacontrol_provider_send_select_result(int request_id, void *db_handle)
 
 int datacontrol_provider_send_insert_result(int request_id, long long row_id)
 {
+	int ret;
+	bundle *res;
+	bundle *b;
+
 	LOGI("Send an insert result for request id: %d", request_id);
 
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
+	b = g_hash_table_lookup(__request_table, &request_id);
 	if (!b) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_INSERT, (void *)&row_id);
+	res = __set_result(b, DATACONTROL_TYPE_SQL_INSERT, (void *)&row_id);
 
-	int ret = __send_result(res, DATACONTROL_TYPE_SQL_INSERT, NULL);
+	ret = __send_result(res, DATACONTROL_TYPE_SQL_INSERT, NULL);
 	g_hash_table_remove(__request_table, &request_id);
 
 	return ret;
-
 }
 
 int datacontrol_provider_send_update_result(int request_id)
 {
+	int ret;
+	bundle *res;
+	bundle *b;
+
 	LOGI("Send an update result for request id: %d", request_id);
 
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
+	b = g_hash_table_lookup(__request_table, &request_id);
 	if (!b) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_UPDATE, NULL);
+	res = __set_result(b, DATACONTROL_TYPE_SQL_UPDATE, NULL);
 
-	int ret = __send_result(res, DATACONTROL_TYPE_SQL_UPDATE, NULL);
+	ret = __send_result(res, DATACONTROL_TYPE_SQL_UPDATE, NULL);
 	g_hash_table_remove(__request_table, &request_id);
 
 	return ret;
-
 }
 
 int datacontrol_provider_send_delete_result(int request_id)
 {
+	int ret;
+	bundle *res;
+	bundle *b;
+
 	LOGI("Send a delete result for request id: %d", request_id);
 
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
+	b = g_hash_table_lookup(__request_table, &request_id);
 	if (!b) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_DELETE, NULL);
+	res = __set_result(b, DATACONTROL_TYPE_SQL_DELETE, NULL);
 
-	int ret = __send_result(res, DATACONTROL_TYPE_SQL_DELETE, NULL);
+	ret = __send_result(res, DATACONTROL_TYPE_SQL_DELETE, NULL);
 	g_hash_table_remove(__request_table, &request_id);
 
 	return ret;
@@ -1097,66 +1136,76 @@ int datacontrol_provider_send_delete_result(int request_id)
 
 int datacontrol_provider_send_error(int request_id, const char *error)
 {
+	bundle *res;
+	bundle *b;
+
 	LOGI("Send an error for request id: %d", request_id);
 
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
+	b = g_hash_table_lookup(__request_table, &request_id);
 	if (!b) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_ERROR, (void *)error);
+	res = __set_result(b, DATACONTROL_TYPE_ERROR, (void *)error);
 
 	return __send_result(res, DATACONTROL_TYPE_ERROR, NULL);
 }
 
 int datacontrol_provider_send_map_result(int request_id)
 {
+	int ret;
+	bundle *res;
+	bundle *b;
+
 	LOGI("Send a set/add/remove result for request id: %d", request_id);
 
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
+	b = g_hash_table_lookup(__request_table, &request_id);
 	if (!b) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_UNDEFINED, NULL);
+	res = __set_result(b, DATACONTROL_TYPE_UNDEFINED, NULL);
 
-	int ret = __send_result(res, DATACONTROL_TYPE_UNDEFINED, NULL);
+	ret = __send_result(res, DATACONTROL_TYPE_UNDEFINED, NULL);
 	g_hash_table_remove(__request_table, &request_id);
 
 	return ret;
-
 }
 
 int datacontrol_provider_send_map_get_value_result(int request_id, char **value_list, int value_count)
 {
+	int ret;
+	char value_count_str[32];
+	bundle *b;
+	bundle *res;
+
 	LOGI("Send a get result for request id: %d", request_id);
 
 	if (__request_table == NULL)
 		__initialize_provider();
 
-	bundle *b = g_hash_table_lookup(__request_table, &request_id);
+	b = g_hash_table_lookup(__request_table, &request_id);
 	if (!b) {
 		LOGE("No data for the request id: %d", request_id);
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
-	char value_count_str[32] = {0,};
 	snprintf(value_count_str, 32, "%d", value_count);
 	bundle_add_str(b, RESULT_VALUE_COUNT, value_count_str);
 
-	bundle *res = __set_result(b, DATACONTROL_TYPE_MAP_GET, value_list);
+	res = __set_result(b, DATACONTROL_TYPE_MAP_GET, value_list);
 
-	int ret = __send_result(res, DATACONTROL_TYPE_MAP_GET, value_list);
+	ret = __send_result(res, DATACONTROL_TYPE_MAP_GET, value_list);
 	g_hash_table_remove(__request_table, &request_id);
 
 	return ret;
-
 }
+

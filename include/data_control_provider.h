@@ -1,18 +1,18 @@
-//
-// Copyright (c) 2013 Samsung Electronics Co., Ltd.
-//
-// Licensed under the Apache License, Version 2.0 (the License);
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at:
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
+/*
+ * Copyright (c) 2013 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #ifndef __TIZEN_APPFW_DATA_CONTROL_PROVIDER_H_
 #define __TIZEN_APPFW_DATA_CONTROL_PROVIDER_H_
@@ -45,8 +45,8 @@ extern "C" {
  *                          If the value is a string, the value must be wrapped in single quotes, else it does not need to be wrapped in single quotes.
  * @param[in]  user_data    The user data passed from the register function
  */
-typedef void (*data_control_provider_sql_insert_request_cb)(int request_id, data_control_h provider,
-        bundle *insert_data, void *user_data);
+typedef void (*data_control_provider_sql_insert_request_cb)(int request_id,
+		data_control_h provider, bundle *insert_data, void *user_data);
 
 /**
  * @brief  Called when the update request is received from an application using SQL-friendly interface based data control.
@@ -60,8 +60,9 @@ typedef void (*data_control_provider_sql_insert_request_cb)(int request_id, data
  *                          It is an SQL 'WHERE' clause excluding the 'WHERE' itself such as column1 = 'stringValue' and column2 = numericValue.
  * @param[in]  user_data    The user data passed from the register function
  */
-typedef void (*data_control_provider_sql_update_request_cb)(int request_id, data_control_h provider,
-        bundle *update_data, const char *where, void *user_data);
+typedef void (*data_control_provider_sql_update_request_cb)(int request_id,
+		data_control_h provider, bundle *update_data,
+		const char *where, void *user_data);
 
 /**
  * @brief  Called when the delete request is received from an application using SQL-friendly interface based data control.
@@ -73,8 +74,8 @@ typedef void (*data_control_provider_sql_update_request_cb)(int request_id, data
  *                         It is an SQL 'WHERE' clause excluding the 'WHERE' itself such as column1 = 'stringValue' and column2 = numericValue.
  * @param[in]  user_data   The user data passed from the register function
  */
-typedef void (*data_control_provider_sql_delete_request_cb)(int request_id, data_control_h provider,
-        const char *where, void *user_data);
+typedef void (*data_control_provider_sql_delete_request_cb)(int request_id,
+		data_control_h provider, const char *where, void *user_data);
 
 /**
  * @brief  Called when the select request is received from an application using SQL-friendly interface based data control.
@@ -90,8 +91,10 @@ typedef void (*data_control_provider_sql_delete_request_cb)(int request_id, data
  *                           It is an SQL 'ORDER BY' clause excluding the 'ORDER BY' itself.
  * @param[in]  user_data     The user data passed from the register function
  */
-typedef void (*data_control_provider_sql_select_request_cb)(int request_id, data_control_h provider,
-        const char **column_list, int column_count, const char *where, const char *order, void *user_data);
+typedef void (*data_control_provider_sql_select_request_cb)(int request_id,
+		data_control_h provider, const char **column_list,
+		int column_count, const char *where, const char *order,
+		void *user_data);
 
 /**
  * @brief  Called when the request for obtaining the value list is received from the key-value structured data control consumer.
@@ -102,7 +105,8 @@ typedef void (*data_control_provider_sql_select_request_cb)(int request_id, data
  * @param[in]  key         The key of the value list to obtain
  * @param[in]  user_data   The user data passed from the register function
  */
-typedef void (*data_control_provider_map_get_value_request_cb)(int request_id, data_control_h provider, const char *key, void *user_data);
+typedef void (*data_control_provider_map_get_value_request_cb)(int request_id,
+		data_control_h provider, const char *key, void *user_data);
 
 /**
  * @brief  Called when the request for replacing the value is received from the key-value structured data control consumer.
@@ -115,8 +119,9 @@ typedef void (*data_control_provider_map_get_value_request_cb)(int request_id, d
  * @param[in]  new_value   The new value that replaces the existing value
  * @param[in]  user_data   The user data passed from the register function
  */
-typedef void (*data_control_provider_map_set_value_request_cb)(int request_id, data_control_h provider, const char *key,
-        const char *old_value, const char *new_value, void *user_data);
+typedef void (*data_control_provider_map_set_value_request_cb)(int request_id,
+		data_control_h provider, const char *key,
+		const char *old_value, const char *new_value, void *user_data);
 
 /**
  * @brief  Called when the request for adding the value is received from the key-value structured data control consumer.
@@ -128,8 +133,9 @@ typedef void (*data_control_provider_map_set_value_request_cb)(int request_id, d
  * @param[in]  value       The value to add
  * @param[in]  user_data   The user data passed from the register function
  */
-typedef void (*data_control_provider_map_add_value_request_cb)(int request_id, data_control_h provider, const char *key,
-        const char *value, void *user_data);
+typedef void (*data_control_provider_map_add_value_request_cb)(int request_id,
+		data_control_h provider, const char *key,
+		const char *value, void *user_data);
 
 /**
  * @brief  Called when the request for removing the value is received from the key-value structured data control consumer.
@@ -141,8 +147,9 @@ typedef void (*data_control_provider_map_add_value_request_cb)(int request_id, d
  * @param[in]  value       The value to remove
  * @param[in]  user_data   The user data passed from the register function
  */
-typedef void (*data_control_provider_map_remove_value_request_cb)(int request_id, data_control_h provider, const char *key,
-        const char *value, void *user_data);
+typedef void (*data_control_provider_map_remove_value_request_cb)(
+		int request_id, data_control_h provider, const char *key,
+		const char *value, void *user_data);
 
 /**
  * @brief  The structure type to contain the set of callback functions for handling the request events
@@ -154,12 +161,11 @@ typedef void (*data_control_provider_map_remove_value_request_cb)(int request_id
  * @see  data_control_provider_sql_update_request_cb()
  * @see  data_control_provider_sql_delete_request_cb()
  */
-typedef struct
-{
-    data_control_provider_sql_insert_request_cb insert_cb; /**< This callback function is called when a request for insert operation is received from other application. */
-    data_control_provider_sql_select_request_cb select_cb; /**< This callback function is called when a request for select operation is received from other application. */
-    data_control_provider_sql_update_request_cb update_cb; /**< This callback function is called when a request for update operation is received from other application. */
-    data_control_provider_sql_delete_request_cb delete_cb; /**< This callback function is called when a request for delete operation is received from other application. */
+typedef struct {
+	data_control_provider_sql_insert_request_cb insert_cb; /**< This callback function is called when a request for insert operation is received from other application. */
+	data_control_provider_sql_select_request_cb select_cb; /**< This callback function is called when a request for select operation is received from other application. */
+	data_control_provider_sql_update_request_cb update_cb; /**< This callback function is called when a request for update operation is received from other application. */
+	data_control_provider_sql_delete_request_cb delete_cb; /**< This callback function is called when a request for delete operation is received from other application. */
 } data_control_provider_sql_cb;
 
 /**
@@ -172,12 +178,11 @@ typedef struct
  * @see  data_control_provider_map_add_value_request_cb()
  * @see  data_control_provider_map_remove_value_request_cb()
  */
-typedef struct
-{
-    data_control_provider_map_get_value_request_cb get_cb; /**< This callback function is called when a request for getting value is received from other application. */
-    data_control_provider_map_set_value_request_cb set_cb; /**< This callback function is called when a request for setting value is received from other application. */
-    data_control_provider_map_add_value_request_cb add_cb; /**< This callback function is called when a request for adding value is received from other application. */
-    data_control_provider_map_remove_value_request_cb remove_cb; /**< This callback function is called when a request for removing value is received from other application. */
+typedef struct {
+	data_control_provider_map_get_value_request_cb get_cb; /**< This callback function is called when a request for getting value is received from other application. */
+	data_control_provider_map_set_value_request_cb set_cb; /**< This callback function is called when a request for setting value is received from other application. */
+	data_control_provider_map_add_value_request_cb add_cb; /**< This callback function is called when a request for adding value is received from other application. */
+	data_control_provider_map_remove_value_request_cb remove_cb; /**< This callback function is called when a request for removing value is received from other application. */
 } data_control_provider_map_cb;
 
 /**
@@ -376,7 +381,7 @@ int data_control_provider_send_map_get_value_result(int request_id, char **value
  * @exception DATA_CONTROL_ERROR_OUT_OF_MEMORY	Out of memory
  * @exception DATA_CONTROL_ERROR_INVALID_PARAMETER	Invalid parameter
  */
-char* data_control_provider_create_insert_statement(data_control_h provider, bundle *insert_map);
+char *data_control_provider_create_insert_statement(data_control_h provider, bundle *insert_map);
 
 /**
  * @brief  Creates SQL DELETE statement.
@@ -392,7 +397,7 @@ char* data_control_provider_create_insert_statement(data_control_h provider, bun
  * @exception DATA_CONTROL_ERROR_OUT_OF_MEMORY	Out of memory
  * @exception DATA_CONTROL_ERROR_INVALID_PARAMETER	Invalid parameter
  */
-char* data_control_provider_create_delete_statement(data_control_h provider, const char *where);
+char *data_control_provider_create_delete_statement(data_control_h provider, const char *where);
 
 /**
  * @brief  Creates SQL UPDATE statement.
@@ -408,7 +413,7 @@ char* data_control_provider_create_delete_statement(data_control_h provider, con
  * @exception DATA_CONTROL_ERROR_OUT_OF_MEMORY	Out of memory
  * @exception DATA_CONTROL_ERROR_INVALID_PARAMETER	Invalid parameter
  */
-char* data_control_provider_create_update_statement(data_control_h provider, bundle *update_map, const char *where);
+char *data_control_provider_create_update_statement(data_control_h provider, bundle *update_map, const char *where);
 
 /**
  * @brief  Creates SQL SELECT statement.
@@ -427,7 +432,7 @@ char* data_control_provider_create_update_statement(data_control_h provider, bun
  * @exception DATA_CONTROL_ERROR_OUT_OF_MEMORY	Out of memory
  * @exception DATA_CONTROL_ERROR_INVALID_PARAMETER	Invalid parameter
  */
-char* data_control_provider_create_select_statement(data_control_h provider, const char **column_list, int column_count, const char *where, const char *order);
+char *data_control_provider_create_select_statement(data_control_h provider, const char **column_list, int column_count, const char *where, const char *order);
 
 /**
  * @brief  Checks whether the given provider ID matches the provider handle's provider ID.

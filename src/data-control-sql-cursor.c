@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2013 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
 #include <dlog.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -35,9 +52,9 @@ int datacontrol_sql_step_next(resultset_cursor *cursor)
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
-	if (cursor->resultset_current_offset == 0)
+	if (cursor->resultset_current_offset == 0) {
 		cursor->resultset_current_offset = cursor->resultset_content_offset;
-	else {
+	} else {
 		if (!(cursor->resultset_current_row_count < (cursor->resultset_row_count - 1))) {
 			LOGE("Reached to the end of the result set");
 			return DATACONTROL_ERROR_IO_ERROR;
@@ -53,6 +70,8 @@ int datacontrol_sql_step_next(resultset_cursor *cursor)
 int datacontrol_sql_step_last(resultset_cursor *cursor)
 {
 	int ret = 0;
+	int i = 0;
+
 	if (cursor->resultset_current_row_count == (cursor->resultset_row_count - 1))
 		return DATACONTROL_ERROR_NONE; /* Already @ last row */
 
@@ -67,7 +86,6 @@ int datacontrol_sql_step_last(resultset_cursor *cursor)
 		cursor->resultset_current_offset = cursor->row_offset_list[cursor->resultset_row_count - 1];
 		cursor->resultset_current_row_count = cursor->resultset_row_count - 1;
 	} else {
-		int i = 0;
 		/* Move till last row offset. */
 		for (i = (cursor->resultset_current_row_count + 1); i < cursor->resultset_row_count; i++) {
 			ret = datacontrol_sql_step_next(cursor); /* move till last row data offset */
@@ -78,7 +96,6 @@ int datacontrol_sql_step_last(resultset_cursor *cursor)
 
 	return DATACONTROL_ERROR_NONE;
 }
-
 
 int datacontrol_sql_step_first(resultset_cursor *cursor)
 {
@@ -93,7 +110,6 @@ int datacontrol_sql_step_first(resultset_cursor *cursor)
 	return datacontrol_sql_step_next(cursor);
 }
 
-
 int datacontrol_sql_step_previous(resultset_cursor *cursor)
 {
 	if ((cursor->resultset_current_row_count - 1) < 0) {
@@ -105,7 +121,6 @@ int datacontrol_sql_step_previous(resultset_cursor *cursor)
 
 	return DATACONTROL_ERROR_NONE;
 }
-
 
 int datacontrol_sql_get_column_count(resultset_cursor *cursor)
 {
@@ -159,7 +174,6 @@ int datacontrol_sql_get_column_name(resultset_cursor *cursor, int column_index, 
 	return DATACONTROL_ERROR_NONE;
 }
 
-
 int datacontrol_sql_get_column_item_size(resultset_cursor *cursor, int column_index)
 {
 	int type = -1;
@@ -212,7 +226,6 @@ int datacontrol_sql_get_column_item_size(resultset_cursor *cursor, int column_in
 	return size;
 }
 
-
 int datacontrol_sql_get_column_item_type(resultset_cursor *cursor, int column_index,
 		datacontrol_sql_column_type *col_type)
 {
@@ -260,23 +273,18 @@ int datacontrol_sql_get_column_item_type(resultset_cursor *cursor, int column_in
 	case DATACONTROL_SQL_COLUMN_TYPE_INT64:
 		*col_type = DATACONTROL_SQL_COLUMN_TYPE_INT64;
 		break;
-
 	case DATACONTROL_SQL_COLUMN_TYPE_DOUBLE:
 		*col_type = DATACONTROL_SQL_COLUMN_TYPE_DOUBLE;
 		break;
-
 	case DATACONTROL_SQL_COLUMN_TYPE_TEXT:
 		*col_type = DATACONTROL_SQL_COLUMN_TYPE_TEXT;
 		break;
-
 	case DATACONTROL_SQL_COLUMN_TYPE_BLOB:
 		*col_type = DATACONTROL_SQL_COLUMN_TYPE_BLOB;
 		break;
-
 	case DATACONTROL_SQL_COLUMN_TYPE_NULL:
 		*col_type = DATACONTROL_SQL_COLUMN_TYPE_NULL;
 		break;
-
 	default:
 		*col_type = DATACONTROL_SQL_COLUMN_TYPE_UNDEFINED;
 		break;
@@ -284,7 +292,6 @@ int datacontrol_sql_get_column_item_type(resultset_cursor *cursor, int column_in
 
 	return DATACONTROL_ERROR_NONE;
 }
-
 
 int datacontrol_sql_get_blob_data(resultset_cursor *cursor, int column_index, void *buffer, int data_size)
 {
@@ -294,6 +301,7 @@ int datacontrol_sql_get_blob_data(resultset_cursor *cursor, int column_index, vo
 	int ret = 0;
 	char err_buf[ERR_BUFFER_SIZE];
 	int fd = cursor->resultset_fd;
+	char *data;
 
 	ret = lseek(fd, cursor->resultset_current_offset, SEEK_SET);
 	if (ret < 0) {
@@ -345,7 +353,7 @@ int datacontrol_sql_get_blob_data(resultset_cursor *cursor, int column_index, vo
 	}
 
 	if (size > 0) {
-		char *data = (char *)malloc((size + 1) * (sizeof(char)));
+		data = (char *)malloc((size + 1) * (sizeof(char)));
 		memset(data, 0, size + 1);
 
 		ret = read(fd, data, size);
@@ -361,7 +369,6 @@ int datacontrol_sql_get_blob_data(resultset_cursor *cursor, int column_index, vo
 	return DATACONTROL_ERROR_NONE;
 }
 
-
 int datacontrol_sql_get_int_data(resultset_cursor *cursor, int column_index, int *data)
 {
 	long long long_value = 0;
@@ -373,7 +380,6 @@ int datacontrol_sql_get_int_data(resultset_cursor *cursor, int column_index, int
 
 	return ret;
 }
-
 
 int datacontrol_sql_get_int64_data(resultset_cursor *cursor, int column_index, long long *data)
 {
@@ -508,6 +514,7 @@ int datacontrol_sql_get_text_data(resultset_cursor *cursor, int column_index, ch
 	int ret = 0;
 	char err_buf[ERR_BUFFER_SIZE];
 	int fd = cursor->resultset_fd;
+	char *data;
 
 	ret = lseek(fd, cursor->resultset_current_offset, SEEK_SET);
 	if (ret < 0) {
@@ -555,7 +562,7 @@ int datacontrol_sql_get_text_data(resultset_cursor *cursor, int column_index, ch
 	}
 
 	if (size > 0) {
-		char *data = (char *)malloc((size + 1) * (sizeof(char)));
+		data = (char *)malloc((size + 1) * (sizeof(char)));
 		if (!data) {
 			LOGE("unable to create buffer to read");
 			return DATACONTROL_ERROR_OUT_OF_MEMORY;
@@ -576,12 +583,13 @@ int datacontrol_sql_get_text_data(resultset_cursor *cursor, int column_index, ch
 	return DATACONTROL_ERROR_NONE;
 }
 
-
 int datacontrol_sql_remove_cursor(resultset_cursor *cursor)
 {
+	int ret;
+
 	close(cursor->resultset_fd);
 
-	int ret = remove(cursor->resultset_path);
+	ret = remove(cursor->resultset_path);
 	if (ret == -1)
 		LOGE("unable to remove map query result file: %d", ret);
 
@@ -594,3 +602,4 @@ int datacontrol_sql_remove_cursor(resultset_cursor *cursor)
 
 	return DATACONTROL_ERROR_NONE;
 }
+

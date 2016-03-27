@@ -1,18 +1,18 @@
-//
-// Copyright (c) 2013 Samsung Electronics Co., Ltd.
-//
-// Licensed under the Apache License, Version 2.0 (the License);
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at:
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
+/*
+ * Copyright (c) 2013 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #ifndef __TIZEN_APPFW_DATA_CONTROL_MAP_H__
 #define __TIZEN_APPFW_DATA_CONTROL_MAP_H__
@@ -57,8 +57,10 @@ extern "C" {
  * @param[in]  error               The error message from the data control provider
  * @param[in]  user_data           The user data passed from the register function
  */
-typedef void (*data_control_map_get_response_cb)(int request_id, data_control_h provider,
-        char **result_value_list, int result_value_count, bool provider_result, const char *error, void *user_data);
+typedef void (*data_control_map_get_response_cb)(int request_id,
+		data_control_h provider, char **result_value_list,
+		int result_value_count, bool provider_result,
+		const char *error, void *user_data);
 
 /**
  * @brief  Called when the response is received from the key-value structured data control provider.
@@ -71,8 +73,9 @@ typedef void (*data_control_map_get_response_cb)(int request_id, data_control_h 
  * @param[in]  error            The error message from the data control provider
  * @param[in]  user_data        The user data passed from the register function
  */
-typedef void (*data_control_map_set_response_cb)(int request_id, data_control_h provider,
-        bool provider_result, const char *error, void *user_data);
+typedef void (*data_control_map_set_response_cb)(int request_id,
+		data_control_h provider, bool provider_result,
+		const char *error, void *user_data);
 
 /**
  * @brief  Called when the response is received from the key-value structured data control provider.
@@ -85,8 +88,9 @@ typedef void (*data_control_map_set_response_cb)(int request_id, data_control_h 
  * @param[in]  error            The error message from the data control provider
  * @param[in]  user_data        The user data passed from the register function
  */
-typedef void (*data_control_map_add_response_cb)(int request_id, data_control_h provider,
-        bool provider_result, const char *error, void *user_data);
+typedef void (*data_control_map_add_response_cb)(int request_id,
+		data_control_h provider, bool provider_result,
+		const char *error, void *user_data);
 
 /**
  * @brief  Called when the response is received from the key-value structured data control provider.
@@ -99,8 +103,9 @@ typedef void (*data_control_map_add_response_cb)(int request_id, data_control_h 
  * @param[in]  error            The error message from the data control provider
  * @param[in]  user_data        The user data passed from the register function
  */
-typedef void (*data_control_map_remove_response_cb)(int request_id, data_control_h provider,
-        bool provider_result, const char *error, void *user_data);
+typedef void (*data_control_map_remove_response_cb)(int request_id,
+		data_control_h provider, bool provider_result,
+		const char *error, void *user_data);
 
 /**
  * @brief  The structure type to contain the set of callback functions for handling the response events
@@ -112,12 +117,11 @@ typedef void (*data_control_map_remove_response_cb)(int request_id, data_control
  * @see  data_control_map_add_response_cb()
  * @see  data_control_map_remove_response_cb()
  */
-typedef struct
-{
-    data_control_map_get_response_cb get_cb; /**< This callback function is called when the response is received for a getting value from the key-value structured data control provider. */
-    data_control_map_set_response_cb set_cb; /**< This callback function is called when the response is received for a setting value from the key-value structured data control provider. */
-    data_control_map_add_response_cb add_cb; /**< This callback function is called when the response is received for a adding value from the key-value structured data control provider. */
-    data_control_map_remove_response_cb remove_cb; /**< This callback function is called when the response is for a removing value received from the key-value structured data control provider. */
+typedef struct {
+	data_control_map_get_response_cb get_cb; /**< This callback function is called when the response is received for a getting value from the key-value structured data control provider. */
+	data_control_map_set_response_cb set_cb; /**< This callback function is called when the response is received for a setting value from the key-value structured data control provider. */
+	data_control_map_add_response_cb add_cb; /**< This callback function is called when the response is received for a adding value from the key-value structured data control provider. */
+	data_control_map_remove_response_cb remove_cb; /**< This callback function is called when the response is for a removing value received from the key-value structured data control provider. */
 } data_control_map_response_cb;
 
 /**
@@ -289,7 +293,7 @@ int data_control_map_get_data_id(data_control_h provider, char **data_id);
  *
  * @see	data_control_map_unregister_response_cb()
  */
-int data_control_map_register_response_cb(data_control_h provider, data_control_map_response_cb* callback, void *user_data);
+int data_control_map_register_response_cb(data_control_h provider, data_control_map_response_cb *callback, void *user_data);
 
 /**
  * @brief  Unregisters the callback function in the @a provider.
@@ -615,3 +619,4 @@ int data_control_map_remove(data_control_h provider, const char *key, const char
 #endif
 
 #endif /* __TIZEN_APPFW_DATA_CONTROL_MAP_H__ */
+

@@ -1,18 +1,19 @@
-//
-// Copyright (c) 2013 Samsung Electronics Co., Ltd.
-//
-// Licensed under the Apache License, Version 2.0 (the License);
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at:
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
+/*
+ * Copyright (c) 2013 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 
 #ifndef __TIZEN_APPFW_DATA_CONTROL_SQL_H__
 #define __TIZEN_APPFW_DATA_CONTROL_SQL_H__
@@ -47,8 +48,9 @@ extern "C" {
  * @param[in]  error            The error message from the data control provider
  * @param[in]  user_data        The user data passed from the register function
  */
-typedef void (*data_control_sql_insert_response_cb)(int request_id, data_control_h provider,
-        long long inserted_row_id, bool provider_result, const char *error, void *user_data);
+typedef void (*data_control_sql_insert_response_cb)(int request_id,
+		data_control_h provider, long long inserted_row_id,
+		bool provider_result, const char *error, void *user_data);
 
 /**
  * @brief  Called when a response is received for a delete operation from an application using the SQL-friendly interface based data control.
@@ -60,8 +62,9 @@ typedef void (*data_control_sql_insert_response_cb)(int request_id, data_control
  * @param[in]  error            The error message from the data control provider
  * @param[in]  user_data        The user data passed from the register function
  */
-typedef void (*data_control_sql_delete_response_cb)(int request_id, data_control_h provider,
-        bool provider_result, const char *error, void *user_data);
+typedef void (*data_control_sql_delete_response_cb)(int request_id,
+		data_control_h provider, bool provider_result,
+		const char *error, void *user_data);
 
 /**
  * @brief  Called when a response is received for a select operation from an application using the SQL-friendly interface based data control.
@@ -77,8 +80,9 @@ typedef void (*data_control_sql_delete_response_cb)(int request_id, data_control
  * @param[in]  error            The error message from the data control provider
  * @param[in]  user_data        The user data passed from the register function
  */
-typedef void (*data_control_sql_select_response_cb)(int request_id, data_control_h provider,
-        result_set_cursor enumerator, bool provider_result, const char *error, void *user_data);
+typedef void (*data_control_sql_select_response_cb)(int request_id,
+		data_control_h provider, result_set_cursor enumerator,
+		bool provider_result, const char *error, void *user_data);
 
 /**
  * @brief  Called when a response is received for an update operation from an application using the SQL-friendly interface based data control.
@@ -91,8 +95,9 @@ typedef void (*data_control_sql_select_response_cb)(int request_id, data_control
  * @param[in]  error            The error message from the data control provider
  * @param[in]  user_data        The user data passed from the register function
  */
-typedef void (*data_control_sql_update_response_cb)(int request_id, data_control_h provider,
-        bool provider_result, const char *error, void *user_data);
+typedef void (*data_control_sql_update_response_cb)(int request_id,
+		data_control_h provider, bool provider_result,
+		const char *error, void *user_data);
 
 /**
  * @brief  The structure type to contain the set of callback functions for handling the response events
@@ -104,12 +109,11 @@ typedef void (*data_control_sql_update_response_cb)(int request_id, data_control
  * @see  data_control_sql_update_response_cb()
  * @see  data_control_sql_delete_response_cb()
  */
-typedef struct
-{
-    data_control_sql_select_response_cb select_cb; /**< This callback function is called when a response is received for an select operation from an application using the SQL-friendly interface based data control. */
-    data_control_sql_insert_response_cb insert_cb; /**< This callback function is called when a response is received for an insert operation from an application using the SQL-friendly interface based data control. */
-    data_control_sql_update_response_cb update_cb; /**< This callback function is called when a response is received for an update operation from an application using the SQL-friendly interface based data control. */
-    data_control_sql_delete_response_cb delete_cb; /**< This callback function is called when a response is received for a delete operation from an application using the SQL-friendly interface based data control. */
+typedef struct {
+	data_control_sql_select_response_cb select_cb; /**< This callback function is called when a response is received for an select operation from an application using the SQL-friendly interface based data control. */
+	data_control_sql_insert_response_cb insert_cb; /**< This callback function is called when a response is received for an insert operation from an application using the SQL-friendly interface based data control. */
+	data_control_sql_update_response_cb update_cb; /**< This callback function is called when a response is received for an update operation from an application using the SQL-friendly interface based data control. */
+	data_control_sql_delete_response_cb delete_cb; /**< This callback function is called when a response is received for a delete operation from an application using the SQL-friendly interface based data control. */
 } data_control_sql_response_cb;
 
 /**
@@ -282,7 +286,7 @@ int data_control_sql_get_data_id(data_control_h provider, char **data_id);
  *
  * @see  data_control_sql_unregister_response_cb()
  */
-int data_control_sql_register_response_cb(data_control_h provider, data_control_sql_response_cb* callback, void *user_data);
+int data_control_sql_register_response_cb(data_control_h provider, data_control_sql_response_cb *callback, void *user_data);
 
 /**
  * @brief  Unregisters the callback function in the @a provider.
@@ -430,7 +434,7 @@ int data_control_sql_delete(data_control_h provider, const char *where, int *req
  * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
  * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
  */
-int data_control_sql_insert(data_control_h provider, const bundle* insert_data, int *request_id);
+int data_control_sql_insert(data_control_h provider, const bundle *insert_data, int *request_id);
 
 /**
  * @brief  Selects the specified columns to be queried.
@@ -611,7 +615,7 @@ int data_control_sql_select_with_page(data_control_h provider, char **column_lis
  * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
  * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
  */
-int data_control_sql_update(data_control_h provider, const bundle* update_data, const char *where, int *request_id);
+int data_control_sql_update(data_control_h provider, const bundle *update_data, const char *where, int *request_id);
 
 /**
 * @}
