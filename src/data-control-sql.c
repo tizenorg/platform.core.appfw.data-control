@@ -26,11 +26,6 @@
 #define REQUEST_PATH_MAX		512
 #define MAX_REQUEST_ARGUMENT_SIZE	1048576	/* 1MB */
 
-struct datacontrol_s {
-	char *provider_id;
-	char *data_id;
-};
-
 typedef struct {
 	char *provider_id;
 	char *app_id;
@@ -41,28 +36,55 @@ typedef struct {
 	datacontrol_sql_response_cb *sql_response_cb;
 } sql_response_cb_s;
 
+typedef struct {
+	void *user_data;
+	data_control_sql_data_changed_cb sql_data_changed_cb;
+	int monitor_id;
+	char *provider_id;
+	char *data_id;
+} sql_data_changed_cb_info_s;
+
+static GList *__changed_callback_list = NULL;
 static void *datacontrol_sql_tree_root = NULL;
 static GHashTable *__socket_pair_hash = NULL;
 static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *cursor);
 
+static int __sql_data_changed_info_compare_cb(gconstpointer a, gconstpointer b)
+{
+	sql_data_changed_cb_info_s *key1 = (sql_data_changed_cb_info_s *)a;
+	sql_data_changed_cb_info_s *key2 = (sql_data_changed_cb_info_s *)b;
+
+	return (strcmp(key1->provider_id, key2->provider_id) || strcmp(key1->data_id, key2->data_id));
+}
+
+static void __free_sql_data_changed_cb_info(sql_data_changed_cb_info_s *info)
+{
+	if (info->provider_id)
+		free(info->provider_id);
+	if (info->data_id)
+		free(info->data_id);
+	if (info->monitor_id > 0)
+		g_dbus_connection_signal_unsubscribe(_get_dbus_connection(), info->monitor_id);
+	free(info);
+}
+
 static void __sql_call_cb(const char *provider_id, int request_id, datacontrol_request_type type,
-		const char *data_id, bool provider_result, const char *error, long long insert_rowid, resultset_cursor *cursor, void *data)
+		const char *data_id, bool provider_result, const char *error, long long insert_rowid, resultset_cursor *cursor, void *response_cb_data)
 {
 	LOGI("__sql_call_cb, dataID !!!: %s", data_id);
 
+	datacontrol_h provider;
 	datacontrol_sql_response_cb *callback = NULL;
 
 	sql_response_cb_s *sql_dc = NULL;
-	sql_dc = (sql_response_cb_s *)data;
+	sql_dc = (sql_response_cb_s *)response_cb_data;
 	callback = sql_dc->sql_response_cb;
 	if (!callback) {
 		LOGE("no listener set");
 		return;
 	}
 
-	datacontrol_h provider;
 	datacontrol_sql_create(&provider);
-
 	datacontrol_sql_set_provider_id(provider, provider_id);
 	datacontrol_sql_set_data_id(provider, data_id);
 
@@ -145,7 +167,7 @@ static void __remove_sql_request_info(int request_id, sql_response_cb_s *sql_dc)
 
 }
 
-static int __sql_handle_cb(bundle *b, void *data, int fd, int request_id)
+static int __sql_handle_cb(bundle *b, void *response_cb_data, int fd, int request_id)
 {
 	resultset_cursor *cursor = NULL;
 	int ret = 0;
@@ -255,7 +277,7 @@ static int __sql_handle_cb(bundle *b, void *data, int fd, int request_id)
 
 	if (request_type >=  DATACONTROL_TYPE_SQL_SELECT && request_type <=  DATACONTROL_TYPE_SQL_DELETE) {
 
-		__sql_call_cb(provider_id, request_id, request_type, data_id, provider_result, error_message, insert_rowid, cursor, data);
+		__sql_call_cb(provider_id, request_id, request_type, data_id, provider_result, error_message, insert_rowid, cursor, response_cb_data);
 
 		if ((request_type == DATACONTROL_TYPE_SQL_SELECT) && (cursor))
 			datacontrol_sql_remove_cursor(cursor);
@@ -513,7 +535,7 @@ out:
 
 static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 		GIOCondition cond,
-		gpointer data) {
+		gpointer response_cb_data) {
 
 	gint fd = g_io_channel_unix_get_fd(channel);
 	char *buf = NULL;
@@ -577,10 +599,10 @@ static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 				request_id = atoi(p);
 			}
 			LOGI("Request ID: %d", request_id);
-			if (__sql_handle_cb(kb, data, fd, request_id)
+			if (__sql_handle_cb(kb, response_cb_data, fd, request_id)
 						!= DATACONTROL_ERROR_NONE)
 				goto error;
-			__remove_sql_request_info(request_id, data);
+			__remove_sql_request_info(request_id, response_cb_data);
 		}
 	}
 	return TRUE;
@@ -588,17 +610,17 @@ error:
 	if (buf)
 		free(buf);
 
-	if (((sql_response_cb_s *)data) != NULL) {
+	if (((sql_response_cb_s *)response_cb_data) != NULL) {
 		LOGE("g_hash_table_remove");
 
-		sql_response_cb_s *sql_dc = (sql_response_cb_s *)data;
+		sql_response_cb_s *sql_dc = (sql_response_cb_s *)response_cb_data;
 		g_hash_table_remove(__socket_pair_hash, sql_dc->provider_id);
 
 		GList *itr = g_list_first(sql_dc->request_info_list);
 		while (itr != NULL) {
 			datacontrol_consumer_request_info *request_info = (datacontrol_consumer_request_info *)itr->data;
 			__sql_call_cb(sql_dc->provider_id, request_info->request_id, request_info->type, sql_dc->data_id, false,
-					"provider IO Error", -1, NULL, data);
+					"provider IO Error", -1, NULL, response_cb_data);
 			itr = g_list_next(itr);
 		}
 		if (sql_dc->request_info_list) {
@@ -679,13 +701,25 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 	LOGI("SQL Data control request, type: %d, request id: %d", type, request_id);
 
 	char *app_id = NULL;
-	void *data = NULL;
+	void *response_cb_data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
+	void *sql_dc_returned = NULL;
+	sql_response_cb_s *sql_dc;
+	datacontrol_consumer_request_info *request_info;
+	char datacontrol_request_operation[MAX_LEN_DATACONTROL_REQ_TYPE] = {0, };
+	char req_id[32] = {0, };
+	char caller_app_id[255];
+	pid_t pid = getpid();
+
+	if (aul_app_get_appid_bypid(pid, caller_app_id, sizeof(caller_app_id)) != 0) {
+		LOGE("Failed to get appid by pid(%d).", pid);
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
 
 	if (__socket_pair_hash == NULL)
 		__socket_pair_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free, _socket_info_free);
 
-	if ((int)type <= (int)DATACONTROL_TYPE_SQL_DELETE) {
+	if ((int)type <= (int)DATACONTROL_TYPE_SQL_UNREGISTER_DATA_CHANGED_CB) {
 
 		if ((int)type < (int)DATACONTROL_TYPE_SQL_SELECT) {
 			LOGE("invalid request type: %d", (int)type);
@@ -723,9 +757,7 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 		sql_dc_temp->user_data = NULL;
 		sql_dc_temp->sql_response_cb = NULL;
 
-		void *sql_dc_returned = NULL;
 		sql_dc_returned = tfind(sql_dc_temp, &datacontrol_sql_tree_root, __sql_instance_compare);
-
 		__sql_instance_free(sql_dc_temp);
 
 		if (!sql_dc_returned) {
@@ -733,34 +765,24 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
 		}
 
-		sql_response_cb_s *sql_dc = *(sql_response_cb_s **)sql_dc_returned;
+		sql_dc = *(sql_response_cb_s **)sql_dc_returned;
 		app_id = sql_dc->app_id;
 
-		datacontrol_consumer_request_info *request_info = (datacontrol_consumer_request_info *)calloc(sizeof(datacontrol_consumer_request_info), 1);
+		request_info = (datacontrol_consumer_request_info *)calloc(sizeof(datacontrol_consumer_request_info), 1);
 		request_info->request_id = request_id;
 		request_info->type = type;
 		sql_dc->request_info_list = g_list_append(sql_dc->request_info_list, request_info);
 
-		data = sql_dc;
-
+		response_cb_data = sql_dc;
 		LOGI("SQL datacontrol appid: %s", sql_dc->app_id);
-	}
-
-	char caller_app_id[255];
-	pid_t pid = getpid();
-	if (aul_app_get_appid_bypid(pid, caller_app_id, sizeof(caller_app_id)) != 0) {
-		LOGE("Failed to get appid by pid(%d).", pid);
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
 	bundle_add_str(request_data, OSP_K_DATACONTROL_PROTOCOL_VERSION, OSP_V_VERSION_2_1_0_3);
 	bundle_add_str(request_data, AUL_K_CALLER_APPID, caller_app_id);
 
-	char datacontrol_request_operation[MAX_LEN_DATACONTROL_REQ_TYPE] = {0, };
 	snprintf(datacontrol_request_operation, MAX_LEN_DATACONTROL_REQ_TYPE, "%d", (int)(type));
 	bundle_add_str(request_data, OSP_K_DATACONTROL_REQUEST_TYPE, datacontrol_request_operation);
 
-	char req_id[32] = {0, };
 	snprintf(req_id, 32, "%d", request_id);
 	bundle_add_str(request_data, OSP_K_REQUEST_ID, req_id);
 
@@ -778,7 +800,7 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 				return ret;
 			}
 
-			socket_info = _get_socket_info(caller_app_id, app_id, "consumer", __consumer_recv_sql_message, data);
+			socket_info = _add_watch_on_socket_info(caller_app_id, app_id, "consumer", __consumer_recv_sql_message, response_cb_data);
 			if (socket_info == NULL) {
 				LOGE("_get_socket_info error !!!");
 				return DATACONTROL_ERROR_IO_ERROR;
@@ -1267,4 +1289,230 @@ int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, co
 
 	bundle_free(b);
 	return ret;
+}
+
+static void __noti_sql_process(data_control_sql_noti_type_e type, GVariant *parameters, gpointer user_data)
+{
+	char *provider_id = NULL;
+	char *data_id = NULL;
+	bundle_raw *raw = NULL;
+	bundle *data = NULL;
+	int len = 0;
+	datacontrol_h provider;
+	GList *find_list;
+	sql_data_changed_cb_info_s *cb_info = NULL;
+	sql_data_changed_cb_info_s info;
+
+	g_variant_get(parameters, "(&s&s&si)", &provider_id, &data_id, &raw, &len);
+	LOGI("__noti_sql_process: %s %s %d", provider_id, data_id, len);
+
+	if (provider_id == NULL || data_id == NULL)
+		return;
+
+	datacontrol_sql_create(&provider);
+	datacontrol_sql_set_provider_id(provider, provider_id);
+	datacontrol_sql_set_data_id(provider, data_id);
+	data = bundle_decode(raw, len);
+
+	info.provider_id = provider_id;
+	info.data_id = data_id;
+
+	find_list = g_list_find_custom(__changed_callback_list, &info,
+					(GCompareFunc)__sql_data_changed_info_compare_cb);
+	if (find_list != NULL) {
+		cb_info = (sql_data_changed_cb_info_s *)find_list->data;
+		LOGI("callback called: %s, %s", cb_info->provider_id, cb_info->data_id);
+		cb_info->sql_data_changed_cb((data_control_h)provider, type, data, cb_info->user_data);
+	} else {
+		LOGE("data_control_sql_data_changed_cb is null");
+	}
+}
+
+static void __handle_sql_noti(GDBusConnection *connection,
+		const gchar     *sender_name,
+		const gchar     *object_path,
+		const gchar     *interface_name,
+		const gchar     *signal_name,
+		GVariant        *parameters,
+		gpointer         user_data)
+{
+	LOGI("signal_name: %s", signal_name);
+
+	data_control_sql_noti_type_e type = DATA_CONTROL_NOTI_SQL_UNDEFINED;
+
+	if (g_strcmp0(signal_name, "noti_sql_update") == 0)
+		type = DATA_CONTROL_NOTI_SQL_UPDATE;
+	else if (g_strcmp0(signal_name, "noti_sql_insert") == 0)
+		type = DATA_CONTROL_NOTI_SQL_INSERT;
+	else if (g_strcmp0(signal_name, "noti_sql_delete") == 0)
+		type = DATA_CONTROL_NOTI_SQL_DELETE;
+	else if (g_strcmp0(signal_name, "noti_sql_register_success") == 0)
+		type = DATA_CONTROL_NOTI_SQL_REGISTER_SUCCESS;
+	else if (g_strcmp0(signal_name, "noti_sql_register_fail") == 0)
+		type = DATA_CONTROL_NOTI_SQL_REGISTER_FAIL;
+	else if (g_strcmp0(signal_name, "noti_sql_unregister_success") == 0)
+		type = DATA_CONTROL_NOTI_SQL_REGISTER_SUCCESS;
+	else if (g_strcmp0(signal_name, "noti_sql_unregister_fail") == 0)
+		type = DATA_CONTROL_NOTI_SQL_UNREGISTER_SUCCESS;
+
+	if (type != DATA_CONTROL_NOTI_SQL_UNDEFINED)
+		__noti_sql_process(type, parameters, user_data);
+}
+
+int datacontrol_sql_register_data_changed_cb(datacontrol_h provider, data_control_sql_data_changed_cb callback, void *user_data)
+{
+	LOGI("datacontrol_sql_register_data_changed_cb");
+	char *provider_id = NULL;
+	char *data_id = NULL;
+	int ret = DATACONTROL_ERROR_NONE;
+	sql_data_changed_cb_info_s *cb_info = NULL;
+	sql_data_changed_cb_info_s *removed_cb_info = NULL;
+	int monitor_id = 0;
+	GList *find_list;
+	char *path = NULL;
+	bundle *b = NULL;
+
+	char caller_app_id[255];
+	pid_t pid = getpid();
+	if (aul_app_get_appid_bypid(pid, caller_app_id, sizeof(caller_app_id)) != 0) {
+		LOGE("Failed to get appid by pid(%d).", pid);
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	path = _get_encoded_path(provider, caller_app_id, DATACONTROL_PATH_TYPE_SQL);
+	if (path == NULL) {
+		LOGE("cannot get encoded path. out of memory.");
+		ret = DATACONTROL_ERROR_OUT_OF_MEMORY;
+		goto err;
+	}
+
+	ret = _dbus_signal_init(&monitor_id, path, __handle_sql_noti);
+	if (ret != DATACONTROL_ERROR_NONE) {
+		LOGE("fail to init dbus signal.");
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto err;
+	}
+
+	provider_id = strdup(provider->provider_id);
+	if (provider_id == NULL) {
+		LOGE("provider_id alloc fail out of memory.");
+		ret = DATACONTROL_ERROR_OUT_OF_MEMORY;
+		goto err;
+	}
+
+	data_id = strdup(provider->data_id);
+	if (data_id == NULL) {
+		LOGE("data_id alloc fail out of memory.");
+		ret = DATACONTROL_ERROR_OUT_OF_MEMORY;
+		goto err;
+	}
+
+	cb_info = (sql_data_changed_cb_info_s *)calloc(1, sizeof(sql_data_changed_cb_info_s));
+	if (cb_info == NULL) {
+		LOGE("sql_data_changed_cb_info_s alloc fail out of memory.");
+		ret = DATACONTROL_ERROR_OUT_OF_MEMORY;
+		goto err;
+	}
+
+	cb_info->user_data = user_data;
+	cb_info->sql_data_changed_cb = callback;
+	cb_info->provider_id = provider_id;
+	cb_info->data_id = data_id;
+	cb_info->monitor_id = monitor_id;
+
+	find_list = g_list_find_custom(__changed_callback_list, cb_info,
+					(GCompareFunc)__sql_data_changed_info_compare_cb);
+
+	if (find_list != NULL) {
+		LOGI("callback info already exist remove: %s, %s", cb_info->provider_id, cb_info->data_id);
+		removed_cb_info = (sql_data_changed_cb_info_s *)find_list->data;
+		__changed_callback_list = g_list_remove(__changed_callback_list, removed_cb_info);
+		__free_sql_data_changed_cb_info(removed_cb_info);
+	}
+	__changed_callback_list = g_list_append(__changed_callback_list, cb_info);
+	LOGI("datacontrol_sql_register_data_changed_cb done for %s", provider_id);
+
+	b = bundle_create();
+	if (!b) {
+		LOGE("unable to create bundle: %d", errno);
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+
+	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
+	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
+
+	const char *arg_list[2];
+	arg_list[0] = provider->data_id;
+	arg_list[1] = DATACONTROL_EMPTY;
+
+	bundle_add_str_array(b, OSP_K_ARG, arg_list, 2);
+
+	/* Set the request id */
+	int req_id = _datacontrol_create_request_id();
+	ret = __sql_request_provider(provider, DATACONTROL_TYPE_SQL_REGISTER_DATA_CHANGED_CB, b, NULL, req_id);
+	bundle_free(b);
+
+	if (ret != DATACONTROL_ERROR_NONE)
+		goto err;
+
+	return ret;
+
+err:
+	if (path)
+		free(path);
+	if (provider_id)
+		free(provider_id);
+	if (data_id)
+		free(data_id);
+	if (monitor_id > 0)
+		g_dbus_connection_signal_unsubscribe(_get_dbus_connection(), monitor_id);
+
+	return ret;
+}
+
+int datacontrol_sql_unregister_data_changed_cb(datacontrol_h provider)
+{
+	LOGI("sql unregister_data_changed_cb");
+	sql_data_changed_cb_info_s *removed_cb_info = NULL;
+	sql_data_changed_cb_info_s info;
+	GList *find_list = NULL;
+
+	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL) {
+		LOGE("Invalid parameter");
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	int ret = 0;
+	bundle *b = bundle_create();
+	if (!b)	{
+		LOGE("unable to create bundle: %d", errno);
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+
+	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
+	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
+
+	int req_id = _datacontrol_create_request_id();
+	ret = __sql_request_provider(provider, DATACONTROL_TYPE_SQL_UNREGISTER_DATA_CHANGED_CB, b, NULL, req_id);
+	bundle_free(b);
+
+	if (ret != DATACONTROL_ERROR_NONE) {
+		LOGE("__sql_request_provider fail %d", ret);
+		return ret;
+	}
+
+	info.provider_id = provider->provider_id;
+	info.data_id = provider->data_id;
+
+	find_list = g_list_find_custom(__changed_callback_list, &info,
+					(GCompareFunc)__sql_data_changed_info_compare_cb);
+
+	if (find_list != NULL) {
+		removed_cb_info = (sql_data_changed_cb_info_s *)find_list->data;
+		__changed_callback_list = g_list_remove(__changed_callback_list, removed_cb_info);
+		g_dbus_connection_signal_unsubscribe(_get_dbus_connection(), removed_cb_info->monitor_id);
+		__free_sql_data_changed_cb_info(removed_cb_info);
+	}
+
+	return DATACONTROL_ERROR_NONE;
 }

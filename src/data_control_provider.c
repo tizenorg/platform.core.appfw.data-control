@@ -4,6 +4,7 @@
 #include <bundle.h>
 
 #include <data-control-provider.h>
+#include <data-control-types.h>
 
 #include "data_control_provider.h"
 #include "data_control_sql.h"
@@ -156,6 +157,44 @@ EXPORT_API int data_control_provider_map_unregister_cb(void)
 	memset(&map_provider_callback, 0, sizeof(data_control_provider_map_cb));
 
 	return datacontrol_provider_map_unregister_cb();
+}
+
+EXPORT_API int data_control_provider_sql_register_changed_noti_consumer_filter_cb(
+	data_control_provider_sql_changed_noti_consumer_filter_cb callback,
+    void *user_data)
+{
+	int retval = datacontrol_check_privilege(PRIVILEGE_PROVIDER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
+	if (!callback)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_sql_register_changed_noti_consumer_filter_cb(callback, user_data);
+}
+
+EXPORT_API int data_control_provider_sql_unregister_changed_noti_consumer_filter_cb(void)
+{
+	return datacontrol_provider_sql_unregister_changed_noti_consumer_filter_cb();
+}
+
+EXPORT_API int data_control_provider_map_register_changed_noti_consumer_filter_cb(
+	data_control_provider_map_changed_noti_consumer_filter_cb callback,
+    void *user_data)
+{
+	int retval = datacontrol_check_privilege(PRIVILEGE_PROVIDER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
+	if (!callback)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_map_register_changed_noti_consumer_filter_cb(callback, user_data);
+}
+
+EXPORT_API int data_control_provider_map_unregister_changed_noti_consumer_filter_cb(void)
+{
+	return datacontrol_provider_map_unregister_changed_noti_consumer_filter_cb();
 }
 
 EXPORT_API int data_control_provider_get_client_appid(int request_id, char **appid)
@@ -536,4 +575,114 @@ EXPORT_API int
 data_control_provider_send_map_get_value_result(int request_id, char **value_list, int value_count)
 {
 	return datacontrol_provider_send_map_get_value_result(request_id, value_list, value_count);
+}
+
+EXPORT_API int data_control_provider_send_map_changed_notify (
+	data_control_h provider,
+	data_control_map_noti_type_e type,
+	bundle *data)
+{
+	LOGI("Send map changed notify : type %d", type);
+	int retval = datacontrol_check_privilege(PRIVILEGE_PROVIDER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	if (type <= DATA_CONTROL_NOTI_MAP_UNDEFINED || type >= DATA_CONTROL_NOTI_MAP_MAX)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_send_changed_notify((datacontrol_h)provider, DATACONTROL_PATH_TYPE_MAP, type, NULL, data);
+}
+
+EXPORT_API int data_control_provider_map_get_changed_noti_consumer_list(
+    data_control_h provider,
+    data_control_provider_map_changed_noti_consumer_list_cb list_cb,
+    void *user_data)
+{
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_get_changed_noti_consumer_list(
+		(datacontrol_h)provider, DATACONTROL_PATH_TYPE_MAP, list_cb, user_data);
+}
+
+EXPORT_API int data_control_provider_map_set_changed_noti_enabled(
+    data_control_h provider,
+    char *consumer_appid,
+    bool enabled)
+{
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_set_changed_noti_enabled(
+		(datacontrol_h)provider, DATACONTROL_PATH_TYPE_MAP, consumer_appid, enabled);
+}
+
+EXPORT_API int data_control_provider_map_get_changed_noti_enabled(
+    data_control_h provider,
+    char *consumer_appid,
+    bool *enabled)
+{
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_get_changed_noti_enabled(
+		(datacontrol_h)provider, DATACONTROL_PATH_TYPE_MAP, consumer_appid, enabled);
+}
+
+EXPORT_API int data_control_provider_send_sql_changed_notify (
+	data_control_h provider,
+	data_control_sql_noti_type_e type,
+	bundle *data)
+{
+	LOGI("Send sql changed notify : type %d", type);
+	int retval = datacontrol_check_privilege(PRIVILEGE_PROVIDER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	if (type <= DATA_CONTROL_NOTI_SQL_UNDEFINED || type >= DATA_CONTROL_NOTI_SQL_MAX)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_send_changed_notify((datacontrol_h)provider, DATACONTROL_PATH_TYPE_SQL, type, NULL, data);
+}
+
+EXPORT_API int data_control_provider_sql_get_changed_noti_consumer_list(
+    data_control_h provider,
+    data_control_provider_sql_changed_noti_consumer_list_cb list_cb,
+    void *user_data)
+{
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_get_changed_noti_consumer_list(
+		(datacontrol_h)provider, DATACONTROL_PATH_TYPE_SQL, list_cb, user_data);
+}
+
+EXPORT_API int data_control_provider_sql_set_changed_noti_enabled(
+    data_control_h provider,
+    char *consumer_appid,
+    bool enabled)
+{
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_set_changed_noti_enabled(
+		(datacontrol_h)provider, DATACONTROL_PATH_TYPE_SQL, consumer_appid, enabled);
+}
+
+EXPORT_API int data_control_provider_sql_get_changed_noti_enabled(
+    data_control_h provider,
+    char *consumer_appid,
+    bool *enabled)
+{
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_get_changed_noti_enabled(
+		(datacontrol_h)provider, DATACONTROL_PATH_TYPE_SQL, consumer_appid, enabled);
 }
