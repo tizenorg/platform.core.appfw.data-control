@@ -65,10 +65,14 @@ typedef enum
 	DATACONTROL_TYPE_SQL_INSERT,
 	DATACONTROL_TYPE_SQL_UPDATE,
 	DATACONTROL_TYPE_SQL_DELETE,
+	DATACONTROL_TYPE_SQL_REGISTER_DATA_CHANGED_CB,
+	DATACONTROL_TYPE_SQL_UNREGISTER_DATA_CHANGED_CB,
 	DATACONTROL_TYPE_MAP_GET,
 	DATACONTROL_TYPE_MAP_SET,
 	DATACONTROL_TYPE_MAP_ADD,
 	DATACONTROL_TYPE_MAP_REMOVE,
+	DATACONTROL_TYPE_MAP_REGISTER_DATA_CHANGED_CB,
+	DATACONTROL_TYPE_MAP_UNREGISTER_DATA_CHANGED_CB,
 	DATACONTROL_TYPE_MAX = 255
 } datacontrol_request_type;
 
@@ -88,6 +92,11 @@ typedef struct datacontrol_consumer_request {
 	datacontrol_request_type type;
 } datacontrol_consumer_request_info;
 
+struct datacontrol_s {
+	char *provider_id;
+	char *data_id;
+};
+
 int _consumer_request_compare_cb(gconstpointer a, gconstpointer b);
 
 int _datacontrol_sql_set_cursor(const char *path);
@@ -104,10 +113,12 @@ int _write_socket(int fd, void *buffer, unsigned int nbytes, unsigned int *bytes
 gboolean _datacontrol_recv_message(GIOChannel *channel, GIOCondition cond, gpointer data);
 int _get_gdbus_shared_connection(GDBusConnection **connection, char *provider_id);
 void _socket_info_free (gpointer socket);
-datacontrol_socket_info * _get_socket_info(const char *caller_id, const char *callee_id, const char *type, GIOFunc cb, void *data);
+datacontrol_socket_info * _add_watch_on_socket_info(const char *caller_id, const char *callee_id, const char *type, GIOFunc cb, void *data);
 int _request_appsvc_run(const char *caller_id, const char *callee_id);
 
-
+GDBusConnection *_get_dbus_connection();
+int _dbus_signal_init(int *monitor_id, char *path, GDBusSignalCallback callback);
+char *_get_encoded_path(datacontrol_h provider, char *consumer_appid, datacontrol_path_type_e type);
 
 #endif /* _APPFW_DATA_CONTROL_INTERNAL_H_ */
 

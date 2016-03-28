@@ -35,6 +35,21 @@ extern "C" {
  * @{
  */
 
+
+/**
+ * @brief  Called when a response is received for an sql data changed notification from an application using the SQL-friendly interface based data control.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider         The provider handle
+ * @param[in]  type  			Changed data type
+ * @param[in]  data  			The data from provider
+ * @param[in]  user_data        The user data passed from the register function
+ */
+typedef void (*data_control_sql_data_changed_cb) (data_control_h provider,
+	data_control_sql_noti_type_e type,
+	bundle *data,
+	void *user_data);
+
 /**
  * @brief  Called when a response is received for an insert operation from an application using the SQL-friendly interface based data control.
  * @since_tizen 2.3
@@ -612,6 +627,39 @@ int data_control_sql_select_with_page(data_control_h provider, char **column_lis
  * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
  */
 int data_control_sql_update(data_control_h provider, const bundle* update_data, const char *where, int *request_id);
+
+/**
+ * @brief  Registers a callback function for the SQL data control data changed notification.
+ * @since_tizen 3.0
+ *
+ * remarks The application is notified when provider's data is changed.
+ *
+ * @param[in]  provider  The provider handle
+ * @param[in]  callback  The callback function to be called when a response is received
+ * @param[in]  user_data The user data to be passed to the callback function
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE          Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR      I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY Out of memory
+ *
+ * @see  data_control_sql_register_data_changed_cb()
+ */
+int data_control_sql_register_data_changed_cb(data_control_h provider, data_control_sql_data_changed_cb callback, void *user_data);
+
+/**
+ * @brief  Unregisters the data changed callback function in the @a provider.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  The provider handle
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ */
+int data_control_sql_unregister_data_changed_cb(data_control_h provider);
+
 
 /**
 * @}

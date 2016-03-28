@@ -63,5 +63,16 @@ typedef enum
 	DATACONTROL_ERROR_MAX_EXCEEDED  = -EMSGSIZE /**< Too long argument */
 } datacontrol_error_e;
 
+/**
+ * @brief Enumerations of the various datacontrol path type.
+ */
+typedef enum
+{
+	DATACONTROL_PATH_TYPE_UNDEFINED = 0,
+	DATACONTROL_PATH_TYPE_SQL,
+	DATACONTROL_PATH_TYPE_MAP,
+	DATACONTROL_PATH_TYPE_NULL
+} datacontrol_path_type_e;
+
 #endif /* _APPFW_DATA_CONTROL_TYPES_H_ */
 

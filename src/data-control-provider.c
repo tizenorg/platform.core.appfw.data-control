@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 
+#include <app.h>
 #include <appsvc/appsvc.h>
 #include <aul/aul.h>
 #include <bundle.h>
@@ -23,8 +24,9 @@
 #include "data-control-provider.h"
 #include "data-control-internal.h"
 
-#define ROW_ID_SIZE				32
-#define RESULT_PATH_MAX				512
+#define QUERY_MAXLEN			4096
+#define ROW_ID_SIZE			32
+#define RESULT_PATH_MAX			512
 
 #define RESULT_PAGE_NUMBER		"RESULT_PAGE_NUMBER"
 #define MAX_COUNT_PER_PAGE		"MAX_COUNT_PER_PAGE"
@@ -50,23 +52,50 @@
 #define PACKET_INDEX_MAP_PAGE_NO	2
 #define PACKET_INDEX_MAP_COUNT_PER_PAGE	3
 
+#define DATA_CONTROL_BUS_NAME "org.tizen.data_control_service"
+#define DATA_CONTROL_OBJECT_PATH "/org/tizen/data_control_service"
+#define DATA_CONTROL_INTERFACE_NAME "org.tizen.data_control_service"
+#define DATA_CONTROL_DB_PATH "._data_control_list_.db"
+
 static GHashTable *__request_table = NULL;
 static GHashTable *__socket_pair_hash = NULL;
+static sqlite3 *__provider_db = NULL;
 
 /* static pthread_mutex_t provider_lock = PTHREAD_MUTEX_INITIALIZER; */
 
-struct datacontrol_s {
-	char *provider_id;
-	char *data_id;
+typedef int (*provider_handler_cb) (bundle *b, int request_id, void *data);
+
+static const char *NOTI_SQL_CMD_STRING[] = {
+	"noti_sql_update",
+	"noti_sql_insert",
+	"noti_sql_delete",
+	"noti_sql_register_success",
+	"noti_sql_register_fail",
+	"noti_sql_unregister_success",
+	"noti_sql_unregister_fail",
 };
 
-
-typedef int (*provider_handler_cb) (bundle *b, int request_id, void *data);
+static const char *NOTI_MAP_CMD_STRING[] = {
+	"noti_map_set",
+	"noti_map_add",
+	"noti_map_remove",
+	"noti_map_register_success",
+	"noti_map_register_fail",
+	"noti_map_unregister_success",
+	"noti_map_unregister_fail",
+};
 
 static datacontrol_provider_sql_cb *provider_sql_cb = NULL;
 static datacontrol_provider_map_cb *provider_map_cb = NULL;
+static data_control_provider_map_changed_noti_consumer_filter_cb provider_map_consumer_filter_cb = NULL;
+static data_control_provider_sql_changed_noti_consumer_filter_cb provider_sql_consumer_filter_cb = NULL;
 static void *provider_map_user_data = NULL;
 static void *provider_sql_user_data = NULL;
+static GList *__sql_consumer_app_list = NULL;
+static GList *__map_consumer_app_list = NULL;
+
+int datacontrol_provider_send_sql_register_data_changed_cb_result(int request_id, bool result);
+int datacontrol_provider_send_map_register_data_changed_cb_result(int request_id, bool result);
 
 static void __free_data(gpointer data)
 {
@@ -579,6 +608,20 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 
 		break;
 	}
+	case DATACONTROL_TYPE_SQL_REGISTER_DATA_CHANGED_CB:
+	case DATACONTROL_TYPE_MAP_REGISTER_DATA_CHANGED_CB:
+	{
+		const char *list[2];
+		char result_str[2] = {0,};
+		bool result = *(bool *)data;
+		snprintf(result_str, 2, "%d", result);
+
+		list[PACKET_INDEX_REQUEST_RESULT] = result_str;		/* request result */
+		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
+
+		bundle_add_str_array(res, OSP_K_ARG, list, 2);
+		break;
+	}
 	case DATACONTROL_TYPE_UNDEFINED:	/* DATACONTROL_TYPE_MAP_SET || ADD || REMOVE */
 	{
 		const char *list[2];
@@ -627,6 +670,358 @@ static int __send_result(bundle *b, datacontrol_request_type type, void *data)
 	return ret;
 }
 
+static int __insert_consumer_list_db_info(datacontrol_path_type_e path_type,
+	char *app_id, char *provider_id, char *data_id, char *object_path, bool notification_enabled)
+{
+	int r;
+	int result = DATACONTROL_ERROR_NONE;
+	char query[QUERY_MAXLEN];
+	char *path_type_str = (path_type == DATACONTROL_PATH_TYPE_SQL) ? "sql" : "map";
+	sqlite3_stmt *stmt = NULL;
+	sqlite3_snprintf(QUERY_MAXLEN, query,
+			"INSERT INTO data_control_%s_cosumer_path_list(app_id, provider_id, data_id, object_path, notification_enabled)" \
+			"VALUES (?,?,?,?,?)", path_type_str);
+	LOGI("consumer list db insert sql : %s", query);
+	r = sqlite3_prepare(__provider_db, query, sizeof(query), &stmt, NULL);
+	if (r != SQLITE_OK) {
+		LOGE("sqlite3_prepare error(%d , %d, %s)", r, sqlite3_extended_errcode(__provider_db), sqlite3_errmsg(__provider_db));
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 1, app_id, strlen(app_id), SQLITE_STATIC);
+	if(r != SQLITE_OK) {
+		LOGE("app_id bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 2, provider_id, strlen(provider_id), SQLITE_STATIC);
+	if(r != SQLITE_OK) {
+		LOGE("provider_id bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 3, data_id, strlen(data_id), SQLITE_STATIC);
+	if(r != SQLITE_OK) {
+		LOGE("data_id bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 4, object_path, strlen(object_path), SQLITE_STATIC);
+	if(r != SQLITE_OK) {
+		LOGE("object_path bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_int(stmt, 5, notification_enabled);
+	if(r != SQLITE_OK) {
+		LOGE("arg bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_step(stmt);
+	if (r != SQLITE_DONE) {
+		LOGE("step error(%d) \n", r);
+		LOGE("sqlite3_step error(%d, %s)",
+				sqlite3_extended_errcode(__provider_db),
+				sqlite3_errmsg(__provider_db));
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+out :
+	if(stmt)
+		sqlite3_finalize(stmt);
+
+	return result;
+}
+
+static int __update_consumer_list_db_info(datacontrol_path_type_e path_type, char *object_path, bool notification_enabled)
+{
+	int r;
+	char query[QUERY_MAXLEN];
+	int result = DATACONTROL_ERROR_NONE;
+	char *path_type_str = (path_type == DATACONTROL_PATH_TYPE_SQL) ? "sql" : "map";
+	sqlite3_stmt *stmt = NULL;
+	sqlite3_snprintf(QUERY_MAXLEN, query,
+			"UPDATE data_control_%s_cosumer_path_list SET notification_enabled = %d WHERE object_path = ?",
+			path_type_str,
+			notification_enabled);
+	LOGI("consumer list db update sql : %s", query);
+	r = sqlite3_prepare(__provider_db, query, sizeof(query), &stmt, NULL);
+	if (r != SQLITE_OK) {
+		LOGE("sqlite3_prepare error(%d , %d, %s)", r,
+				sqlite3_extended_errcode(__provider_db), sqlite3_errmsg(__provider_db));
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 1, object_path, strlen(object_path), SQLITE_STATIC);
+	if(r != SQLITE_OK) {
+		LOGE("caller bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_step(stmt);
+	if (r != SQLITE_DONE) {
+		LOGE("step error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+out :
+	if(stmt)
+		sqlite3_finalize(stmt);
+
+	return result;
+}
+
+
+static int __delete_consumer_list_db_info(datacontrol_path_type_e path_type, char *object_path)
+{
+	int r;
+	char query[QUERY_MAXLEN];
+	int result = DATACONTROL_ERROR_NONE;
+	char *path_type_str = (path_type == DATACONTROL_PATH_TYPE_SQL) ? "sql" : "map";
+	sqlite3_stmt *stmt = NULL;
+	sqlite3_snprintf(QUERY_MAXLEN, query,
+			"DELETE FROM data_control_%s_cosumer_path_list WHERE object_path = ?",
+			path_type_str);
+	LOGI("consumer list db DELETE sql : %s", query);
+	r = sqlite3_prepare(__provider_db, query, sizeof(query), &stmt, NULL);
+	if (r != SQLITE_OK) {
+		LOGE("sqlite3_prepare error(%d , %d, %s)", r,
+				sqlite3_extended_errcode(__provider_db), sqlite3_errmsg(__provider_db));
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 1, object_path, strlen(object_path), SQLITE_STATIC);
+	if(r != SQLITE_OK) {
+		LOGE("caller bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_step(stmt);
+	if (r != SQLITE_DONE) {
+		LOGE("step error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+out :
+	if(stmt)
+		sqlite3_finalize(stmt);
+
+	return result;
+}
+
+int __init_changed_noti_consumer_list()
+{
+	LOGI("__init_changed_noti_consumer_list @@@@");
+	char *app_id = NULL;
+	bool notification_enabled;
+	int ret = DATACONTROL_ERROR_NONE;
+	sqlite3_stmt *stmt = NULL;
+	char *query;
+
+	g_list_free(__sql_consumer_app_list);
+	g_list_free(__map_consumer_app_list);
+
+	query = "SELECT app_id, notification_enabled " \
+		"FROM data_control_sql_cosumer_path_list";
+	ret = sqlite3_prepare_v2(__provider_db, query, -1, &stmt, NULL);
+	if (ret != SQLITE_OK) {
+		LOGE("prepare stmt fail");
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	while (SQLITE_ROW == sqlite3_step(stmt)) {
+		app_id = (char *)sqlite3_column_text(stmt, 0);
+		if (!app_id) {
+			LOGE("Failed to get package name\n");
+			continue;
+		}
+		notification_enabled = sqlite3_column_int(stmt, 1);
+		LOGI("app_id : %s, enabled : %d", app_id, notification_enabled);
+
+		if (notification_enabled)
+			__sql_consumer_app_list = g_list_append(__sql_consumer_app_list, strdup(app_id));
+	}
+
+	sqlite3_reset(stmt);
+	sqlite3_finalize(stmt);
+
+	query = "SELECT app_id, notification_enabled " \
+		"FROM data_control_map_cosumer_path_list";
+	ret = sqlite3_prepare_v2(__provider_db, query, -1, &stmt, NULL);
+	if (ret != SQLITE_OK) {
+		LOGE("prepare stmt fail");
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	while (SQLITE_ROW == sqlite3_step(stmt)) {
+		app_id = (char *)sqlite3_column_text(stmt, 0);
+		if (!app_id) {
+			LOGE("Failed to get package name\n");
+			continue;
+		}
+		notification_enabled = sqlite3_column_int(stmt, 1);
+		LOGI("app_id : %s, enabled : %d", app_id, notification_enabled);
+
+		if (notification_enabled)
+			__map_consumer_app_list = g_list_append(__map_consumer_app_list, strdup(app_id));
+	}
+out:
+	sqlite3_reset(stmt);
+	sqlite3_finalize(stmt);
+
+	return ret;
+}
+
+static int __create_consumer_list_db()
+{
+	char *app_data_path = NULL;
+	int ret = SQLITE_OK;
+	int db_path_len;
+	char *db_path;
+	int open_flags = (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+	char* sql_table_command =
+		"CREATE TABLE IF NOT EXISTS data_control_sql_cosumer_path_list" \
+		"(app_id TEXT NOT NULL, provider_id TEXT NOT NULL, data_id TEXT NOT NULL, object_path TEXT NOT NULL," \
+		"notification_enabled INTEGER DEFAULT 1," \
+		"PRIMARY KEY(object_path))";
+	char* map_table_command =
+		"CREATE TABLE IF NOT EXISTS data_control_map_cosumer_path_list" \
+		"(app_id TEXT NOT NULL, provider_id TEXT NOT NULL, data_id TEXT NOT NULL, object_path TEXT NOT NULL," \
+		"notification_enabled INTEGER DEFAULT 1," \
+		"PRIMARY KEY(object_path))";
+
+	if (__provider_db == NULL) {
+		app_data_path = app_get_data_path();
+		db_path_len = strlen(app_data_path) + strlen(DATA_CONTROL_DB_PATH) + 1;
+		db_path = (char *)calloc(db_path_len, sizeof(char));
+
+		snprintf(db_path, db_path_len, "%s%s", app_data_path, DATA_CONTROL_DB_PATH);
+		LOGI("data-control provider db path : %s", db_path);
+		ret = sqlite3_open_v2(db_path, &__provider_db, open_flags, NULL);
+		if (ret != SQLITE_OK) {
+			LOGE("database creation failed with error: %d", ret);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+		ret = sqlite3_exec(__provider_db, sql_table_command, NULL, NULL, NULL);
+		if (ret != SQLITE_OK) {
+			LOGE("database sql table creation failed with error: %d", ret);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+		ret = sqlite3_exec(__provider_db, map_table_command, NULL, NULL, NULL);
+		if (ret != SQLITE_OK) {
+			LOGE("database map table creation failed with error: %d", ret);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+
+		ret = __init_changed_noti_consumer_list();
+		if (ret != DATACONTROL_ERROR_NONE) {
+			LOGE("__init_changed_noti_consumer_list fail %d", ret);
+			return ret;
+		}
+	}
+	return DATACONTROL_ERROR_NONE;
+}
+
+static int __set_consumer_list_db_info(datacontrol_path_type_e path_type,
+	char *app_id, char *provider_id, char *data_id, char *object_path, bool notification_enabled)
+{
+	int result = DATACONTROL_ERROR_NONE;
+	int affected_rows = 0;
+
+	result = __create_consumer_list_db();
+	if (result != DATACONTROL_ERROR_NONE) {
+		LOGE("create consumer list db fail");
+		return result;
+	}
+
+	result = __update_consumer_list_db_info(path_type, object_path, notification_enabled);
+	affected_rows = sqlite3_changes(__provider_db);
+	if ((result != DATACONTROL_ERROR_NONE) || (affected_rows == 0)) {
+		LOGI("consumer info update affect 0 row, try to insert data");
+		result = __insert_consumer_list_db_info(path_type, app_id, provider_id, data_id, object_path, notification_enabled);
+		if (result != DATACONTROL_ERROR_NONE) {
+			LOGE("update consumer info fail.");
+			return result;
+		}
+	}
+	LOGI("__set_consumer_list_db_info done");
+	return result;
+}
+
+static int __consumer_app_list_compare_cb(gconstpointer a, gconstpointer b)
+{
+	return strcmp(a, b);
+}
+
+static int __set_sql_consumer_app_list(bool register_caller, char *caller, datacontrol_h provider)
+{
+	int ret = DATACONTROL_ERROR_NONE;
+	LOGI("__set_sql_consumer_app_list register_caller : %d, caller : %s", register_caller, caller);
+	GList *consumer_list = NULL;
+	if (register_caller) {
+		consumer_list = g_list_find_custom(__sql_consumer_app_list, caller,
+			(GCompareFunc)__consumer_app_list_compare_cb);
+
+		if (consumer_list == NULL) {
+			__sql_consumer_app_list = g_list_append(__sql_consumer_app_list, strdup(caller));
+			LOGI("new __sql_consumer_app_list %s", caller);
+		}
+		ret = datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_SQL,
+			DATA_CONTROL_NOTI_SQL_REGISTER_SUCCESS, caller, NULL);
+	} else {
+		if (__sql_consumer_app_list) {
+			__sql_consumer_app_list = g_list_remove(__sql_consumer_app_list, caller);
+			LOGI("filter return false, remove %s from __sql_consumer_app_list", caller);
+		}
+		ret = datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_SQL,
+			DATA_CONTROL_NOTI_SQL_REGISTER_FAIL, caller, NULL);
+	}
+
+	return ret;
+}
+
+static int __set_map_consumer_app_list(bool register_caller, char *caller, datacontrol_h provider)
+{
+	int ret = DATACONTROL_ERROR_NONE;
+	LOGI("__set_map_consumer_app_list register_caller : %d, caller : %s", register_caller, caller);
+	GList *consumer_list = NULL;
+	if (register_caller) {
+		consumer_list = g_list_find_custom(__map_consumer_app_list, caller,
+			(GCompareFunc)__consumer_app_list_compare_cb);
+
+		if (consumer_list == NULL) {
+			__map_consumer_app_list = g_list_append(__map_consumer_app_list, strdup(caller));
+			LOGI("new __map_consumer_app_list %s", caller);
+		}
+		ret = datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_SQL,
+			DATA_CONTROL_NOTI_SQL_REGISTER_SUCCESS, caller, NULL);
+	} else {
+		if (__map_consumer_app_list) {
+			__map_consumer_app_list = g_list_remove(__map_consumer_app_list, caller);
+			LOGI("filter return false, remove %s from __map_consumer_app_list", caller);
+		}
+		ret = datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_MAP,
+			DATA_CONTROL_NOTI_MAP_REGISTER_FAIL, caller, NULL);
+	}
+
+	return ret;
+}
 
 int __provider_process(bundle *b, int fd)
 {
@@ -637,6 +1032,11 @@ int __provider_process(bundle *b, int fd)
 	int provider_req_id = 0;
 	int *key = NULL;
 	bundle *value = NULL;
+	char *caller = NULL;
+	bool noti_enable = true;
+	sqlite3_stmt *db_statement = NULL;
+	char *path = NULL;
+	int result = DATACONTROL_ERROR_NONE;
 
 	const char *request_type = bundle_get_val(b, OSP_K_DATACONTROL_REQUEST_TYPE);
 	if (request_type == NULL) {
@@ -659,8 +1059,11 @@ int __provider_process(bundle *b, int fd)
 		}
 
 	} else {
-		LOGE("Invalid requeste type");
-		return DATACONTROL_ERROR_INVALID_PARAMETER;
+		if (type != DATACONTROL_TYPE_SQL_REGISTER_DATA_CHANGED_CB &&
+			type != DATACONTROL_TYPE_MAP_REGISTER_DATA_CHANGED_CB) {
+			LOGE("Invalid requeste type");
+			return DATACONTROL_ERROR_INVALID_PARAMETER;
+		}
 	}
 
 	arg_list = bundle_get_str_array(b, OSP_K_ARG, &len);
@@ -766,6 +1169,123 @@ int __provider_process(bundle *b, int fd)
 		provider_sql_cb->delete(provider_req_id, provider, where, provider_sql_user_data);
 		break;
 	}
+	case DATACONTROL_TYPE_SQL_REGISTER_DATA_CHANGED_CB:
+	{
+		LOGI("DATACONTROL_TYPE_SQL_REGISTER_DATA_CHANGED_CB @@@@@@@@@@");
+
+		caller = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
+		path = _get_encoded_path(provider, caller, DATACONTROL_PATH_TYPE_SQL);
+		if (path == NULL) {
+			LOGE("can not get encoded path out of memory");
+			datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_SQL,
+				DATA_CONTROL_NOTI_SQL_REGISTER_FAIL, caller, NULL);
+			goto err;
+		}
+
+		if (provider_sql_consumer_filter_cb) {
+			noti_enable = provider_sql_consumer_filter_cb((data_control_h)provider, caller, provider_sql_user_data);
+			LOGI("provider_sql_consumer_filter_cb result %d @@@@@@@@@@", noti_enable);
+		}
+
+		result = __set_consumer_list_db_info(DATACONTROL_PATH_TYPE_SQL, caller, provider->provider_id, provider->data_id, path, noti_enable);
+		if (result != DATACONTROL_ERROR_NONE) {
+			LOGE("fail to set consumer list db info %d", result);
+			datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_SQL,
+				DATA_CONTROL_NOTI_SQL_REGISTER_FAIL, caller, NULL);
+			goto err;
+		}
+		__set_sql_consumer_app_list(noti_enable, caller, provider);
+
+		break;
+	}
+	case DATACONTROL_TYPE_SQL_UNREGISTER_DATA_CHANGED_CB:
+	{
+		LOGI("DATACONTROL_TYPE_SQL_UNREGISTER_DATA_CHANGED_CB ##########");
+		caller = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
+		path = _get_encoded_path(provider, caller, DATACONTROL_PATH_TYPE_SQL);
+		if (path == NULL) {
+			LOGE("can not get encoded path out of memory");
+			datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_SQL,
+				DATA_CONTROL_NOTI_SQL_UNREGISTER_FAIL, caller, NULL);
+			goto err;
+		}
+
+		if (__sql_consumer_app_list) {
+			__sql_consumer_app_list = g_list_remove(__sql_consumer_app_list, caller);
+			LOGI("unregister %s from __sql_consumer_app_list", caller);
+		} else {
+			LOGI("empty __sql_consumer_app_list");
+		}
+
+		result = __delete_consumer_list_db_info(DATACONTROL_PATH_TYPE_SQL, path);
+		if (result != DATACONTROL_ERROR_NONE) {
+			LOGE("__delete_consumer_list_db_info fail %d", result);
+			datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_SQL,
+				DATA_CONTROL_NOTI_SQL_UNREGISTER_FAIL, caller, NULL);
+			goto err;
+		}
+
+		datacontrol_provider_send_changed_notify((datacontrol_h)provider, DATACONTROL_PATH_TYPE_SQL,
+			DATA_CONTROL_NOTI_SQL_UNREGISTER_SUCCESS, caller, NULL);
+	}
+	case DATACONTROL_TYPE_MAP_REGISTER_DATA_CHANGED_CB:
+	{
+		LOGI("DATACONTROL_TYPE_MAP_REGISTER_DATA_CHANGED_CB @@@@@@@@@@");
+
+		caller = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
+		path = _get_encoded_path(provider, caller, DATACONTROL_PATH_TYPE_MAP);
+		if (path == NULL) {
+			LOGE("can not get encoded path out of memory");
+			datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_MAP,
+				DATA_CONTROL_NOTI_MAP_REGISTER_FAIL, caller, NULL);
+			goto err;
+		}
+
+		if (provider_map_consumer_filter_cb) {
+			noti_enable = provider_map_consumer_filter_cb((data_control_h)provider, caller, provider_map_user_data);
+			LOGI("provider_map_consumer_filter_cb result %d @@@@@@@@@@", noti_enable);
+		}
+
+		result = __set_consumer_list_db_info(DATACONTROL_PATH_TYPE_MAP, caller, provider->provider_id, provider->data_id, path, noti_enable);
+		if (result != DATACONTROL_ERROR_NONE) {
+			LOGE("fail to set consumer list db info %d", result);
+			datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_MAP,
+				DATA_CONTROL_NOTI_MAP_REGISTER_FAIL, caller, NULL);
+			goto err;
+		}
+		__set_map_consumer_app_list(noti_enable, caller, provider);
+		break;
+	}
+	case DATACONTROL_TYPE_MAP_UNREGISTER_DATA_CHANGED_CB:
+	{
+		LOGI("DATACONTROL_TYPE_MAP_UNREGISTER_DATA_CHANGED_CB ##########");
+		caller = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
+		path = _get_encoded_path(provider, caller, DATACONTROL_PATH_TYPE_MAP);
+		if (path == NULL) {
+			LOGE("can not get encoded path out of memory");
+			datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_MAP,
+				DATA_CONTROL_NOTI_MAP_UNREGISTER_FAIL, caller, NULL);
+			goto err;
+		}
+
+		if (__map_consumer_app_list) {
+			__map_consumer_app_list = g_list_remove(__map_consumer_app_list, caller);
+			LOGI("unregister %s from __map_consumer_app_list", caller);
+		} else {
+			LOGI("empty __map_consumer_app_list");
+		}
+
+		result = __delete_consumer_list_db_info(DATACONTROL_PATH_TYPE_MAP, path);
+		if (result != DATACONTROL_ERROR_NONE) {
+			LOGE("__delete_consumer_list_db_info fail %d", result);
+			datacontrol_provider_send_changed_notify(provider, DATACONTROL_PATH_TYPE_MAP,
+				DATA_CONTROL_NOTI_MAP_UNREGISTER_FAIL, caller, NULL);
+			goto err;
+		}
+
+		datacontrol_provider_send_changed_notify((datacontrol_h)provider, DATACONTROL_PATH_TYPE_MAP,
+			DATA_CONTROL_NOTI_MAP_UNREGISTER_SUCCESS, caller, NULL);
+	}
 	case DATACONTROL_TYPE_MAP_GET:
 	{
 		const char *map_key = arg_list[PACKET_INDEX_MAP_KEY];
@@ -817,6 +1337,8 @@ err:
 		free(key);
 	if (value)
 		free(value);
+	if (db_statement)
+		sqlite3_finalize(db_statement);
 
 	return DATACONTROL_ERROR_IO_ERROR;
 }
@@ -900,6 +1422,7 @@ int __datacontrol_handler_cb(bundle *b, int request_id, void *data)
 {
 	LOGI("datacontrol_handler_cb");
 	datacontrol_socket_info *socket_info;
+	int ret = DATACONTROL_ERROR_NONE;
 
 	char *caller = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
 	char *callee = (char *)bundle_get_val(b, AUL_K_CALLEE_APPID);
@@ -909,13 +1432,15 @@ int __datacontrol_handler_cb(bundle *b, int request_id, void *data)
 	if (socket_info != NULL)
 		g_hash_table_remove(__socket_pair_hash, caller);
 
-	socket_info = _get_socket_info(caller, callee, "provider", __provider_recv_message, caller);
+	socket_info = _add_watch_on_socket_info(caller, callee, "provider", __provider_recv_message, caller);
 	if (socket_info == NULL)
 		return DATACONTROL_ERROR_IO_ERROR;
 
 	g_hash_table_insert(__socket_pair_hash, strdup(caller), socket_info);
 
-	return DATACONTROL_ERROR_NONE;
+	ret = __create_consumer_list_db();
+
+	return ret;
 }
 
 int datacontrol_provider_sql_register_cb(datacontrol_provider_sql_cb *callback, void *user_data)
@@ -1008,6 +1533,44 @@ int datacontrol_provider_get_client_appid(int request_id, char **appid)
 	*appid = strdup(caller);
 
 	return DATACONTROL_ERROR_NONE;
+}
+
+int datacontrol_provider_send_map_register_data_changed_cb_result(int request_id, bool result)
+{
+	LOGI("Send an map_register_data_changed_cb result for request id: %d", request_id);
+	if (__request_table == NULL)
+		__initialize_provider();
+
+	bundle *b = g_hash_table_lookup(__request_table, &request_id);
+	if (!b) {
+		LOGE("No data for the request id: %d", request_id);
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	bundle *res = __set_result(b, DATACONTROL_TYPE_MAP_REGISTER_DATA_CHANGED_CB, &result);
+	int ret = __send_result(res, DATACONTROL_TYPE_MAP_REGISTER_DATA_CHANGED_CB, NULL);
+	g_hash_table_remove(__request_table, &request_id);
+
+	return ret;
+}
+
+int datacontrol_provider_send_sql_register_data_changed_cb_result(int request_id, bool result)
+{
+	LOGI("Send an sql_register_data_changed_cb result for request id: %d", request_id);
+	if (__request_table == NULL)
+		__initialize_provider();
+
+	bundle *b = g_hash_table_lookup(__request_table, &request_id);
+	if (!b) {
+		LOGE("No data for the request id: %d", request_id);
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	bundle *res = __set_result(b, DATACONTROL_TYPE_SQL_REGISTER_DATA_CHANGED_CB, &result);
+	int ret = __send_result(res, DATACONTROL_TYPE_SQL_REGISTER_DATA_CHANGED_CB, NULL);
+	g_hash_table_remove(__request_table, &request_id);
+
+	return ret;
 }
 
 int datacontrol_provider_send_select_result(int request_id, void *db_handle)
@@ -1158,5 +1721,287 @@ int datacontrol_provider_send_map_get_value_result(int request_id, char **value_
 	g_hash_table_remove(__request_table, &request_id);
 
 	return ret;
-
 }
+
+int __send_signal_to_consumer(datacontrol_h provider,
+	datacontrol_path_type_e path_type,
+	const char *cmd,
+	char *target,
+	bundle *data)
+{
+	int result = DATACONTROL_ERROR_NONE;
+	int len = 0;
+	bundle_raw *raw = NULL;
+	GError *err = NULL;
+	char *path = NULL;
+
+	path = _get_encoded_path(provider, target, path_type);
+	if (path == NULL) {
+		LOGE("can not get encoded path out of memory");
+		result = DATACONTROL_ERROR_OUT_OF_MEMORY;
+		goto out;
+	}
+	if (data) {
+		if (bundle_encode(data, &raw, &len) != BUNDLE_ERROR_NONE) {
+			LOGE("bundle_encode fail");
+			result = DATACONTROL_ERROR_IO_ERROR;
+			goto out;
+		}
+	}
+
+	LOGI("emit signal to %s object path %s", target, path);
+	if (g_dbus_connection_emit_signal(
+				_get_dbus_connection(),
+				NULL,
+				path,
+				DATA_CONTROL_INTERFACE_NAME,
+				cmd,
+				g_variant_new("(sssi)",
+					provider->provider_id,
+					provider->data_id,
+					((raw) ? (char *)raw : ""),
+					len), &err) == FALSE) {
+
+		LOGE("g_dbus_connection_emit_signal() is failed");
+		if (err != NULL) {
+			LOGE("g_dbus_connection_emit_signal() err : %s",
+					err->message);
+			g_error_free(err);
+		}
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+
+out:
+	if (path)
+		free(path);
+	if (raw)
+		free(raw);
+
+	return result;
+}
+
+int datacontrol_provider_send_changed_notify (
+	datacontrol_h provider,
+	datacontrol_path_type_e path_type,
+	int type,
+	char *target,
+	bundle *data)
+{
+	LOGI("Send datacontrol_provider_send_changed_notify path_type :%d, type :%d", path_type, type);
+	int result = DATACONTROL_ERROR_NONE;
+	GList *consumer_list = NULL;
+	char *consumer_appid;
+	const char *cmd = NULL;
+
+	if (DATACONTROL_PATH_TYPE_SQL == path_type) {
+		consumer_list = g_list_first(__sql_consumer_app_list);
+		cmd = NOTI_SQL_CMD_STRING[type];
+	} else if (DATACONTROL_PATH_TYPE_MAP == path_type) {
+		consumer_list = g_list_first(__map_consumer_app_list);
+		cmd = NOTI_MAP_CMD_STRING[type];
+	}
+
+	if (target) {
+		result = __send_signal_to_consumer(provider, path_type, cmd, target, data);
+		LOGI("__send_signal_to_consumer result : %d", result);
+	} else {
+		for (; consumer_list != NULL; consumer_list = consumer_list->next) {
+			consumer_appid = consumer_list->data;
+			result = __send_signal_to_consumer(provider, path_type, cmd, consumer_appid, data);
+			if (result != DATACONTROL_ERROR_NONE) {
+				LOGE("__send_signal_to_consumer fail : %d", result);
+				break;
+			}
+		}
+	}
+	LOGI("Send datacontrol_provider_send_changed_notify %s done %d", cmd, result);
+	return result;
+}
+
+int datacontrol_provider_sql_register_changed_noti_consumer_filter_cb(
+	data_control_provider_sql_changed_noti_consumer_filter_cb callback,
+	void *user_data)
+{
+	LOGI("sql_register_consumer_filter_cb");
+	provider_sql_consumer_filter_cb = callback;
+	return DATACONTROL_ERROR_NONE;
+}
+
+int datacontrol_provider_sql_unregister_changed_noti_consumer_filter_cb()
+{
+	LOGI("sql_unregister_consumer_filter_cb");
+	provider_sql_consumer_filter_cb = NULL;
+	return DATACONTROL_ERROR_NONE;
+}
+
+int datacontrol_provider_map_register_changed_noti_consumer_filter_cb(
+	data_control_provider_map_changed_noti_consumer_filter_cb callback,
+	void *user_data)
+{
+	LOGI("map_register_consumer_filter_cb");
+	provider_map_consumer_filter_cb = callback;
+	return DATACONTROL_ERROR_NONE;
+}
+
+int datacontrol_provider_map_unregister_changed_noti_consumer_filter_cb()
+{
+	LOGI("map_unregister_consumer_filter_cb");
+	provider_map_consumer_filter_cb = NULL;
+	return DATACONTROL_ERROR_NONE;
+}
+
+int datacontrol_provider_get_changed_noti_consumer_list(
+    datacontrol_h provider,
+    datacontrol_path_type_e path_type,
+    void *list_cb,
+    void *user_data)
+{
+	LOGI("get_changed_noti_consumer_list @@@@");
+	char *app_id = NULL;
+	bool notification_enabled;
+	int ret = DATACONTROL_ERROR_NONE;
+	sqlite3_stmt *stmt = NULL;
+	char query[QUERY_MAXLEN];
+	data_control_provider_sql_changed_noti_consumer_list_cb sql_list_cb;
+	data_control_provider_map_changed_noti_consumer_list_cb map_list_cb;
+	char *path_type_str;
+
+	if (path_type == DATACONTROL_PATH_TYPE_SQL) {
+		sql_list_cb = (data_control_provider_sql_changed_noti_consumer_list_cb)list_cb;
+		path_type_str = "sql";
+	} else {
+		map_list_cb = (data_control_provider_map_changed_noti_consumer_list_cb)list_cb;
+		path_type_str = "map";
+	}
+
+	sqlite3_snprintf(QUERY_MAXLEN, query,
+		"SELECT app_id, notification_enabled " \
+		"FROM data_control_%s_cosumer_path_list WHERE provider_id = ? AND data_id = ?", path_type_str);
+
+	LOGI("get_changed_noti_consumer_list query : %s", query);
+
+	ret = sqlite3_prepare_v2(__provider_db, query, -1, &stmt, NULL);
+	if (ret != SQLITE_OK) {
+		LOGE("prepare stmt fail");
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	ret = sqlite3_bind_text(stmt, 1, provider->provider_id, -1, SQLITE_TRANSIENT);
+	if (ret != SQLITE_OK) {
+		LOGE("bind provider id fail: %s", sqlite3_errmsg(__provider_db));
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	ret = sqlite3_bind_text(stmt, 2, provider->data_id, -1, SQLITE_TRANSIENT);
+	if (ret != SQLITE_OK) {
+		LOGE("bind data id fail: %s", sqlite3_errmsg(__provider_db));
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	while (SQLITE_ROW == sqlite3_step(stmt)) {
+		app_id = (char *)sqlite3_column_text(stmt, 0);
+		if (!app_id) {
+			LOGE("Failed to get package name\n");
+			continue;
+		}
+		notification_enabled = sqlite3_column_int(stmt, 1);
+		LOGI("app_id : %s, enabled : %d", app_id, notification_enabled);
+		if (path_type == DATACONTROL_PATH_TYPE_SQL)
+			sql_list_cb((data_control_h)provider, app_id, notification_enabled, user_data);
+		else
+			map_list_cb((data_control_h)provider, app_id, notification_enabled, user_data);
+	}
+out:
+	sqlite3_reset(stmt);
+	sqlite3_clear_bindings(stmt);
+	sqlite3_finalize(stmt);
+
+	return ret;
+}
+
+int datacontrol_provider_set_changed_noti_enabled(
+    datacontrol_h provider,
+    datacontrol_path_type_e path_type,
+    char *consumer_appid,
+    bool enabled)
+{
+	int ret = DATACONTROL_ERROR_NONE;
+	char *object_path = NULL;
+
+	LOGI("consumer_appid : %s", consumer_appid);
+	object_path = _get_encoded_path(provider, consumer_appid, path_type);
+	if (object_path == NULL) {
+		LOGE("can not get encoded path out of memory");
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+	ret = __update_consumer_list_db_info(path_type, object_path, enabled);
+	if (ret == DATACONTROL_ERROR_NONE) {
+		if (path_type == DATACONTROL_PATH_TYPE_SQL)
+			__set_sql_consumer_app_list(enabled, consumer_appid, provider);
+		else
+			__set_map_consumer_app_list(enabled, consumer_appid, provider);
+	}
+	return ret;
+}
+
+int datacontrol_provider_get_changed_noti_enabled(
+    datacontrol_h provider,
+    datacontrol_path_type_e path_type,
+    char *consumer_appid,
+    bool *enabled)
+{
+	LOGI("get_changed_noti_enabled @@@@");
+	int ret = DATACONTROL_ERROR_NONE;
+	sqlite3_stmt *stmt = NULL;
+	char query[QUERY_MAXLEN];
+	char *path_type_str = (path_type == DATACONTROL_PATH_TYPE_SQL) ? "sql" : "map";
+
+	sqlite3_snprintf(QUERY_MAXLEN, query,
+		"SELECT app_id, notification_enabled " \
+		"FROM data_control_%s_cosumer_path_list WHERE provider_id = ? AND data_id = ?", path_type_str);
+
+	LOGI("get_changed_noti_enabled query : %s", query);
+
+	ret = sqlite3_prepare_v2(__provider_db, query, -1, &stmt, NULL);
+	if (ret != SQLITE_OK) {
+		LOGE("prepare stmt fail");
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	ret = sqlite3_bind_text(stmt, 1, provider->provider_id, -1, SQLITE_TRANSIENT);
+	if (ret != SQLITE_OK) {
+		LOGE("bind provider id fail: %s", sqlite3_errmsg(__provider_db));
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	ret = sqlite3_bind_text(stmt, 2, provider->data_id, -1, SQLITE_TRANSIENT);
+	if (ret != SQLITE_OK) {
+		LOGE("bind data id fail: %s", sqlite3_errmsg(__provider_db));
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	ret = sqlite3_bind_text(stmt, 3, consumer_appid, -1, SQLITE_TRANSIENT);
+	if (ret != SQLITE_OK) {
+		LOGE("bind consumer_appid fail: %s", sqlite3_errmsg(__provider_db));
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	while (SQLITE_ROW == sqlite3_step(stmt)) {
+		*enabled = sqlite3_column_int(stmt, 0);
+		LOGI("consumer_appid : %s, enabled : %d", consumer_appid, *enabled);
+	}
+out:
+	sqlite3_reset(stmt);
+	sqlite3_clear_bindings(stmt);
+	sqlite3_finalize(stmt);
+
+	return ret;
+}
+

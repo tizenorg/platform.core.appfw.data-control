@@ -23,6 +23,8 @@
 #define _APPFW_DATA_CONTROL_PROVIDER_H_
 
 #include <data-control-types.h>
+#include <data_control_types.h>
+ #include <data_control_provider.h>
 #include <data-control-sql-cursor.h>
 
 #ifdef __cplusplus
@@ -281,6 +283,175 @@ EXPORT_API int datacontrol_provider_send_map_result(int request_id);
  * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
  */
 EXPORT_API int datacontrol_provider_send_map_get_value_result(int request_id, char **value_list, int value_count);
+
+/**
+ * @brief  Notify consumer apps which are registers data changed callback.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  The provider handle
+ * @param[in]  cmd   Changed operation type (SQL/MAP)
+ * @param[in]  data   Customized data
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATACONTROL_ERROR_NONE              Successful
+ * @retval #DATACONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATACONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATACONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+EXPORT_API int datacontrol_provider_send_changed_notify (
+	datacontrol_h provider,
+	datacontrol_path_type_e path_type,
+	int type,
+	char *target,
+	bundle *data);
+
+/**
+ * @brief  Register SQL data changed notification consumer filter.
+ * @since_tizen 3.0
+ *
+ * @param[in]  callback  Consumer filter callback 
+ * @param[in]  data   Customized data
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int datacontrol_provider_sql_register_changed_noti_consumer_filter_cb(
+	data_control_provider_sql_changed_noti_consumer_filter_cb callback,
+	void *user_data);
+
+/**
+ * @brief  Unregister SQL data changed notification consumer filter.
+ * @since_tizen 3.0
+ *
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int datacontrol_provider_sql_unregister_changed_noti_consumer_filter_cb(void);
+
+/**
+ * @brief  Register MAP data changed notification consumer filter.
+ * @since_tizen 3.0
+ *
+ * @param[in]  callback  Consumer filter callback
+ * @param[in]  data   Customized data
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int datacontrol_provider_map_register_changed_noti_consumer_filter_cb(
+	data_control_provider_map_changed_noti_consumer_filter_cb callback,
+	void *user_data);
+
+/**
+ * @brief  Unregister MAP data changed notification consumer filter.
+ * @since_tizen 3.0
+ *
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int datacontrol_provider_map_unregister_changed_noti_consumer_filter_cb(void);
+
+/**
+ * @brief  Get data changed notification target consumer list.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  The provider handle
+ * @param[in]  path_type   List type, SQL/MAP
+ * @param[in]  list_cb   Callback for each consumer info
+ * @param[in]  user_data   Customized data
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int datacontrol_provider_get_changed_noti_consumer_list(
+    datacontrol_h provider,
+    datacontrol_path_type_e path_type,
+    void *list_cb,
+    void *user_data);
+
+/**
+ * @brief  Set consumer app's data changed notification enabled state.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  The provider handle
+ * @param[in]  path_type   Consumer type, SQL/MAP
+ * @param[in]  consumer_appid   Target consumer app id
+ * @param[in]  enabled   Notification enabled state
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int datacontrol_provider_set_changed_noti_enabled(
+    datacontrol_h provider,
+    datacontrol_path_type_e path_type,
+    char *consumer_appid,
+    bool enabled);
+
+/**
+ * @brief  Get consumer app's data changed notification enabled state.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  The provider handle
+ * @param[in]  path_type   Consumer type, SQL/MAP
+ * @param[in]  consumer_appid   Target consumer app id
+ * @param[out]  enabled   Notification enabled state
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int datacontrol_provider_get_changed_noti_enabled(
+    datacontrol_h provider,
+    datacontrol_path_type_e path_type,
+    char *consumer_appid,
+    bool *enabled);
+
 
 #ifdef __cplusplus
 }

@@ -124,7 +124,7 @@ int datacontrol_sql_get_column_name(resultset_cursor *cursor, int column_index, 
 	ret = lseek(fd, cursor->resultset_col_name_offset, SEEK_SET);
 	if (ret < 0) {
 		LOGE("unable to seek in the resultset file: %d %s", cursor->resultset_current_offset,
-				strerror_r(errno, err_buf, sizeof(err_buf)));
+				strerror(errno));
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 

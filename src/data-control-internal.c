@@ -15,11 +15,13 @@
 #include <pkgmgr-info.h>
 
 #include <sys/socket.h>
+#include <openssl/md5.h>
 
 #include <sqlite3.h>
 
 #include "data-control-sql-cursor.h"
 #include "data-control-internal.h"
+#include "data-control-types.h"
 
 #define MAX_COLUMN_SIZE				512
 #define MAX_STATEMENT_SIZE			1024
@@ -30,16 +32,11 @@
 
 #define ERR_BUFFER_SIZE         1024
 #define BUFSIZE 512
+#define DATA_CONTROL_DBUS_PATH_PREFIX "/org/tizen/data_control_service_"
+#define DATA_CONTROL_OBJECT_PATH "/org/tizen/data_control_service"
+#define DATA_CONTROL_INTERFACE_NAME "org.tizen.data_control_service"
 
-int _consumer_request_compare_cb(gconstpointer a, gconstpointer b)
-{
-	datacontrol_consumer_request_info *key1 = (datacontrol_consumer_request_info *)a;
-	datacontrol_consumer_request_info *key2 = (datacontrol_consumer_request_info *)b;
-	if (key1->request_id == key2->request_id)
-		return 0;
-
-	return 1;
-}
+static GDBusConnection *_gdbus_conn = NULL;
 
 int _write_socket(int fd,
 		void *buffer,
@@ -166,10 +163,10 @@ void _socket_info_free(gpointer socket)
 
 }
 
-datacontrol_socket_info *_get_socket_info(const char *caller_id, const char *callee_id, const char *type,
+datacontrol_socket_info *_add_watch_on_socket_info(const char *caller_id, const char *callee_id, const char *type,
 		GIOFunc cb, void *data)
 {
-	char err_buf[ERR_BUFFER_SIZE];
+
 	int socketpair = 0;
 	datacontrol_socket_info *socket_info = NULL;
 	bundle *sock_bundle = bundle_create();
@@ -186,7 +183,7 @@ datacontrol_socket_info *_get_socket_info(const char *caller_id, const char *cal
 		GIOChannel *gio_read = NULL;
 		gio_read = g_io_channel_unix_new(socketpair);
 		if (!gio_read) {
-			LOGE("Error is %s\n", strerror_r(errno, err_buf, sizeof(err_buf)));
+			LOGE("Error is %s\n", strerror(errno));
 			return NULL;
 		}
 
@@ -271,3 +268,110 @@ int _request_appsvc_run(const char *caller_id, const char *callee_id)
 
 }
 
+char *_get_encoded_path(datacontrol_h provider, char *consumer_appid, datacontrol_path_type_e type)
+{
+	int prefix_len = strlen(DATA_CONTROL_DBUS_PATH_PREFIX);
+	unsigned char c[MD5_DIGEST_LENGTH] = {0};
+	char *md5_interface = NULL;
+	char *temp;
+	int index = 0;
+	MD5_CTX mdContext;
+	int encoded_path_len = prefix_len + (MD5_DIGEST_LENGTH * 2) + 2;
+	int path_len = strlen(provider->provider_id) + strlen(provider->data_id) + strlen(consumer_appid) + 5;
+	char *path = (char *)calloc(path_len, sizeof(char));
+	if (path == NULL) {
+		LOGE("path calloc failed");
+		return 0;
+	}
+
+	snprintf(path, path_len, "%s_%s_%d_%s", provider->provider_id, provider->data_id, type, consumer_appid);
+	MD5_Init(&mdContext);
+	MD5_Update(&mdContext, path, path_len);
+	MD5_Final(c, &mdContext);
+
+	md5_interface = (char *)calloc(encoded_path_len , sizeof(char));
+	if (md5_interface == NULL) {
+		free(path);
+		LOGE("md5_interface calloc failed!!");
+		return 0;
+	}
+
+	snprintf(md5_interface, encoded_path_len, "%s", DATA_CONTROL_DBUS_PATH_PREFIX);
+	temp = md5_interface;
+	temp += prefix_len;
+
+	for (index = 0; index < MD5_DIGEST_LENGTH; index++) {
+		snprintf(temp, 3, "%02x", c[index]);
+		temp += 2;
+	}
+	free(path);
+
+	LOGI("encoded path : %s ", md5_interface);
+	return md5_interface;
+}
+
+int _consumer_request_compare_cb(gconstpointer a, gconstpointer b)
+{
+	datacontrol_consumer_request_info *key1 = (datacontrol_consumer_request_info *)a;
+	datacontrol_consumer_request_info *key2 = (datacontrol_consumer_request_info *)b;
+	if (key1->request_id == key2->request_id)
+		return 0;
+
+	return 1;
+}
+
+int _dbus_init()
+{
+	int ret = DATACONTROL_ERROR_NONE;
+	GError *error = NULL;
+
+	if (_gdbus_conn == NULL) {
+		_gdbus_conn = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
+
+		if (_gdbus_conn == NULL) {
+			if (error != NULL) {
+				LOGE("Failed to get dbus [%s]", error->message);
+				g_error_free(error);
+			}
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+		ret = DATACONTROL_ERROR_NONE;
+	}
+	return ret;
+}
+
+GDBusConnection *_get_dbus_connection()
+{
+	int result = _dbus_init();
+	if (result != DATACONTROL_ERROR_NONE) {
+		LOGE("Can't init dbus %d", result);
+		return NULL;
+	}
+	return _gdbus_conn;
+}
+
+int _dbus_signal_init(int *monitor_id, char *path, GDBusSignalCallback callback)
+{
+	int id;
+	id = g_dbus_connection_signal_subscribe(
+			_get_dbus_connection(),
+			NULL,
+			DATA_CONTROL_INTERFACE_NAME,	/*	interface */
+			NULL,				/*	member */
+			path,				/*	path */
+			NULL,				/*	arg0 */
+			G_DBUS_SIGNAL_FLAGS_NONE,
+			callback,
+			NULL,
+			NULL);
+
+	LOGI("subscribe id : %d", id);
+	if (id == 0) {
+		return DATACONTROL_ERROR_IO_ERROR;
+		LOGE("Failed to _register_noti_dbus_interface");
+	} else {
+		*monitor_id = id;
+	}
+
+	return DATACONTROL_ERROR_NONE;
+}
