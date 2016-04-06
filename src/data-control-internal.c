@@ -94,28 +94,44 @@ int _read_socket(int fd, char *buffer, unsigned int nbytes,
 	unsigned int left = nbytes;
 	gsize nb;
 	int retry_cnt = 0;
+	struct timeval tv;
+	fd_set readfds;
+	int select_ret;
+
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+
+	FD_ZERO(&readfds);
+	FD_SET(fd, &readfds);
+
+	select_ret = select(fd + 1, &readfds, NULL, NULL, &tv);
+	if (select_ret < 0) {
+		LOGE("error %d on select", errno);
+	}
 
 	*bytes_read = 0;
-	while (left && (retry_cnt < MAX_RETRY)) {
-		nb = read(fd, buffer, left);
-		LOGI("_read_socket: ...from %d: nb %d left %d\n", fd, nb, left - nb);
-		if (nb == 0) {
-			LOGE("_read_socket: ...read EOF, socket closed %d: nb %d\n", fd, nb);
-			return DATACONTROL_ERROR_IO_ERROR;
-		} else if (nb == -1) {
-			if (errno == EINTR) {
-				LOGE("_read_socket: EINTR error continue ...");
-				retry_cnt++;
-				continue;
+	if (FD_ISSET(fd, &readfds)) {
+		while (left && (retry_cnt < MAX_RETRY)) {
+			nb = read(fd, buffer, left);
+			LOGI("_read_socket: ...from %d: nb %d left %d\n", fd, nb, left - nb);
+			if (nb == 0) {
+				LOGE("_read_socket: ...read EOF, socket closed %d: nb %d\n", fd, nb);
+				return DATACONTROL_ERROR_IO_ERROR;
+			} else if (nb == -1) {
+				if (errno == EINTR) {
+					LOGE("_read_socket: EINTR error continue ...");
+					retry_cnt++;
+					continue;
+				}
+				LOGE("_read_socket: ...error fd %d: errno %d\n", fd, errno);
+				return DATACONTROL_ERROR_IO_ERROR;
 			}
-			LOGE("_read_socket: ...error fd %d: errno %d\n", fd, errno);
-			return DATACONTROL_ERROR_IO_ERROR;
-		}
 
-		left -= nb;
-		buffer += nb;
-		*bytes_read += nb;
-		retry_cnt = 0;
+			left -= nb;
+			buffer += nb;
+			*bytes_read += nb;
+			retry_cnt = 0;
+		}
 	}
 	return DATACONTROL_ERROR_NONE;
 }
