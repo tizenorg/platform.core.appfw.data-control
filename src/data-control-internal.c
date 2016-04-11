@@ -103,6 +103,10 @@ int _read_socket(int fd, char *buffer, unsigned int nbytes,
 			LOGE("_read_socket: ...read EOF, socket closed %d: nb %d\n", fd, nb);
 			return DATACONTROL_ERROR_IO_ERROR;
 		} else if (nb == -1) {
+			if (errno == EAGAIN) {
+				LOGE("_read_socket: EAGAIN continue ...");
+				continue;
+			}
 			if (errno == EINTR) {
 				LOGE("_read_socket: EINTR error continue ...");
 				retry_cnt++;
