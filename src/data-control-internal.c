@@ -42,7 +42,7 @@
 #define RESULT_VALUE_COUNT			"RESULT_VALUE_COUNT"
 #define MAX_COUNT_PER_PAGE		"MAX_COUNT_PER_PAGE"
 #define RESULT_PAGE_NUMBER		"RESULT_PAGE_NUMBER"
-#define MAX_RETRY			5
+#define MAX_RETRY			10
 
 #define ERR_BUFFER_SIZE         1024
 #define BUFSIZE 512
@@ -94,6 +94,7 @@ int _read_socket(int fd, char *buffer, unsigned int nbytes,
 	unsigned int left = nbytes;
 	gsize nb;
 	int retry_cnt = 0;
+	const struct timespec TRY_SLEEP_TIME = { 0, 500 * 1000 * 1000 };
 
 	*bytes_read = 0;
 	while (left && (retry_cnt < MAX_RETRY)) {
@@ -103,9 +104,10 @@ int _read_socket(int fd, char *buffer, unsigned int nbytes,
 			LOGE("_read_socket: ...read EOF, socket closed %d: nb %d\n", fd, nb);
 			return DATACONTROL_ERROR_IO_ERROR;
 		} else if (nb == -1) {
-			if (errno == EINTR) {
-				LOGE("_read_socket: EINTR error continue ...");
+			if (errno == EINTR || errno == EAGAIN) {
+				LOGE("_read_socket: %d errno, sleep and retry ...", errno);
 				retry_cnt++;
+				nanosleep(&TRY_SLEEP_TIME, 0);
 				continue;
 			}
 			LOGE("_read_socket: ...error fd %d: errno %d\n", fd, errno);
