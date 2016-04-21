@@ -62,6 +62,19 @@ typedef enum {
 } data_control_error_e;
 
 /**
+ * @brief Enumeration for the various changed notification types.
+ * @since_tizen 3.0
+ */
+typedef enum {
+    DATA_CONTROL_NOTI_SQL_UPDATE,
+    DATA_CONTROL_NOTI_SQL_INSERT,
+    DATA_CONTROL_NOTI_SQL_DELETE,
+    DATA_CONTROL_NOTI_MAP_SET,
+    DATA_CONTROL_NOTI_MAP_ADD,
+    DATA_CONTROL_NOTI_MAP_REMOVE
+} data_control_noti_type_e;
+
+/**
 * @}
 */
 

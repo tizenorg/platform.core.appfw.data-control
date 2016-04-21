@@ -35,11 +35,6 @@
 #include "data-control-map.h"
 #include "data-control-internal.h"
 
-struct datacontrol_s {
-	char *provider_id;
-	char *data_id;
-};
-
 typedef struct {
 	char *provider_id;
 	char *app_id;
@@ -549,7 +544,7 @@ static int __map_request_provider(datacontrol_h provider, datacontrol_request_ty
 			if (ret != DATACONTROL_ERROR_NONE)
 				return ret;
 
-			socket_info = _get_socket_info(caller_app_id, app_id, "consumer", __recv_map_message, data);
+			socket_info = _add_watch_on_socket_info(caller_app_id, app_id, "consumer", __recv_map_message, data);
 			if (socket_info == NULL)
 				return DATACONTROL_ERROR_IO_ERROR;
 
