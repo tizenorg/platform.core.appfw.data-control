@@ -66,6 +66,7 @@
  *   -  data_control_sql_get_int64_data()
  *   -  data_control_sql_get_double_data()
  *   -  data_control_sql_get_text_data()
+ * Note: All callbacks are called in the main loop context, unless stated otherwise.
  */
 
 /**
@@ -80,6 +81,7 @@
  * The service application providing its own database file must register the provider callback using data_control_provider_sql_register_cb().
  * The service application providing its own registry file or key-value pairs data set must register the provider callback using the data_control_provider_map_register_cb().
  * The service application sends SQL-type or Map-type data control result to the other application, by using methods such as data_control_provider_send_select_result(),data_control_provider_send_insert_result(), data_control_provider_send_update_result(), or data_control_provider_send_delete_result().
+ * Note: All callbacks are called in the main loop context, unless stated otherwise.
  */
 
 

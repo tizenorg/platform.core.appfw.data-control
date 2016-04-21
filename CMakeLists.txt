@@ -20,12 +20,14 @@ SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -Wall -fPIC -Werror -fvisibi
 SET(CMAKE_C_FLAGS_DEBUG "-O0 -g")
 
 ADD_LIBRARY (${PROJECT_NAME} SHARED
+	src/data-control-noti.c
 	src/data-control-map.c
 	src/data-control-sql.c
 	src/data-control-sql-cursor.c
 	src/data-control-provider.c
 	src/data-control-internal.c
 	src/data_control_internal.c
+	src/data_control_noti.c
 	src/data_control_map.c
 	src/data_control_sql.c
 	src/data_control_sql_cursor.c
@@ -47,6 +49,9 @@ ADD_CUSTOM_COMMAND(
 
 SET(VERSION ${FULLVER})
 CONFIGURE_FILE(${PROJECT_NAME}.pc.in ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.pc @ONLY)
+CONFIGURE_FILE(${PROJECT_NAME}.conf.in ${PROJECT_NAME}.conf @ONLY)
+
+INSTALL(FILES ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.conf DESTINATION ${SYSCONF_INSTALL_DIR}/dbus-1/session.d/)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
 CONFIGURE_FILE(capi-${PROJECT_NAME}.pc.in ${CMAKE_SOURCE_DIR}/capi-${PROJECT_NAME}.pc @ONLY)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/capi-${PROJECT_NAME}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
