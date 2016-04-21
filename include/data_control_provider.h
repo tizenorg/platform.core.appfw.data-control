@@ -35,6 +35,34 @@ extern "C" {
  * @{
  */
 
+
+/**
+ * @brief  Called when the application call data_control_provider_get_changed_noti_consumer_list.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider                 The provider handle
+ * @param[in]  consumer_appid           SQL type data changed notification target consumer's appid 
+ * @param[in]  user_data                The user data
+ */
+typedef void (*data_control_provider_changed_noti_consumer_list_cb)(
+    data_control_h provider,
+    char *consumer_appid,
+    void *user_data);
+
+
+/**
+ * @brief  Called when the register data changed noti request is received from an application using data control.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider                 The provider handle
+ * @param[in]  consumer_appid           Consumer appid which request register data changed noti
+ * @param[in]  user_data                The user data
+ */
+typedef bool (*data_control_provider_changed_noti_consumer_filter_cb)(
+    data_control_h provider,
+    char *consumer_appid,
+    void *user_data);
+
 /**
  * @brief  Called when the insert request is received from an application using SQL-friendly interface based data control.
  * @since_tizen 2.3
@@ -463,6 +491,86 @@ bool data_control_provider_match_provider_id(data_control_h provider, const char
  * @exception DATA_CONTROL_ERROR_INVALID_PARAMETER	Invalid parameter
  */
 bool data_control_provider_match_data_id(data_control_h provider, const char *data_id);
+
+/**
+ * @brief  Notify consumer apps which are registers data changed callback.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  The provider handle
+ * @param[in]  type   Changed operation type
+ * @param[in]  data   Customized data
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int data_control_provider_send_changed_notify (
+    data_control_h provider,
+    data_control_noti_type_e type,
+    bundle *data);
+
+/**
+ * @brief  Add data changed notification consumer filter.
+ * @since_tizen 3.0
+ *
+ * @param[in]  callback  Consumer filter callback
+ * @param[in]  data   Customized data
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int data_control_provider_add_changed_noti_consumer_filter_cb(
+    data_control_provider_changed_noti_consumer_filter_cb callback,
+    void *user_data,
+    int *callback_id);
+
+/**
+ * @brief  Remove data changed notification consumer filter.
+ * @since_tizen 3.0
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int data_control_provider_remove_changed_noti_consumer_filter_cb(int callback_id);
+
+/**
+ * @brief  Get SQL data changed notification target consumer list.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  The provider handle
+ * @param[in]  list_cb   Callback for each consumer info
+ * @param[in]  data   Customized data
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int data_control_provider_get_changed_noti_consumer_list(
+    data_control_h provider,
+    data_control_provider_changed_noti_consumer_list_cb list_cb,
+    void *user_data);
 
 /**
 * @}
