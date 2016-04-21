@@ -23,12 +23,13 @@
 #define _APPFW_DATA_CONTROL_PROVIDER_H_
 
 #include <data-control-types.h>
+#include <data_control_types.h>
+#include <data_control_provider.h>
 #include <data-control-sql-cursor.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 
 /**
  * @brief	Called when the insert request is received from an application using SQL-friendly interface based data control.
@@ -279,6 +280,69 @@ EXPORT_API int datacontrol_provider_send_map_result(int request_id);
  * @retval #DATACONTROL_ERROR_INVALID_PARAMETER Invalid parameter
  */
 EXPORT_API int datacontrol_provider_send_map_get_value_result(int request_id, char **value_list, int value_count);
+
+/**
+ * @brief  Send data changed notification to consumer apps which are successfully add data changed callback.
+ * @param[in]  provider		Target provider handle
+ * @param[in]  type		Changed data type
+ * @param[in]  data		Customized data, intend to contains information about changed data.
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATACONTROL_ERROR_NONE              Successful
+ * @retval #DATACONTROL_ERROR_IO_ERROR          I/O error
+ */
+EXPORT_API int datacontrol_provider_send_changed_notify (
+	datacontrol_h provider,
+	int type,
+	bundle *data);
+
+/**
+ * @brief  Add consumer filter for add data changed callback process.
+ * @param[in]  callback	Consumer	filter callback filtering consumers which try to add data changed callback.
+ * @param[in]  user_data		The user data to be passed to the list_cb function
+ * @param[out]  callback_id		Added callback ID
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATACONTROL_ERROR_NONE              Successful
+ * @retval #DATACONTROL_ERROR_IO_ERROR          I/O error
+ */
+EXPORT_API int datacontrol_provider_add_changed_noti_consumer_filter_cb(
+	data_control_provider_changed_noti_consumer_filter_cb callback,
+	void *user_data,
+	int *callback_id);
+
+/**
+ * @brief  Remove consumer filter for add data changed callback process.
+ * @param[in]  callback_id	Target callback ID
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATACONTROL_ERROR_NONE              Successful
+ * @retval #DATACONTROL_ERROR_IO_ERROR          I/O error
+ */
+EXPORT_API int datacontrol_provider_remove_changed_noti_consumer_filter_cb(int callback_id);
+
+/**
+ * @brief  Get consumer list which successfully add data changed callback.
+ * @param[in]  provider 	 The provider handle
+ * @param[in]  list_cb  	 Callback for each consumer info
+ * @param[in]  user_data 	 The user data to be passed to the list_cb function
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATACONTROL_ERROR_NONE              Successful
+ * @retval #DATACONTROL_ERROR_IO_ERROR          I/O error
+ */
+EXPORT_API int datacontrol_provider_get_changed_noti_consumer_list(
+    datacontrol_h provider,
+    void *list_cb,
+    void *user_data);
 
 #ifdef __cplusplus
 }
