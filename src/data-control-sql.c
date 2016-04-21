@@ -43,11 +43,6 @@
 #define REQUEST_PATH_MAX		512
 #define MAX_REQUEST_ARGUMENT_SIZE	1048576	/* 1MB */
 
-struct datacontrol_s {
-	char *provider_id;
-	char *data_id;
-};
-
 typedef struct {
 	char *provider_id;
 	char *app_id;
@@ -679,7 +674,7 @@ out:
 static int __sql_request_provider(datacontrol_h provider, datacontrol_request_type type, bundle *request_data, bundle *extra_kb, int request_id)
 {
 	char *app_id = NULL;
-	void *data = NULL;
+	void *response_cb_data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
 	sql_response_cb_s *sql_dc_temp;
 	void *sql_dc_returned = NULL;
@@ -751,7 +746,7 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 		request_info->type = type;
 		sql_dc->request_info_list = g_list_append(sql_dc->request_info_list, request_info);
 
-		data = sql_dc;
+		response_cb_data = sql_dc;
 
 		LOGI("SQL datacontrol appid: %s", sql_dc->app_id);
 	}
@@ -781,7 +776,7 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 				return ret;
 			}
 
-			socket_info = _get_socket_info(caller_app_id, app_id, "consumer", __consumer_recv_sql_message, data);
+			socket_info = _add_watch_on_socket_info(caller_app_id, app_id, "consumer", __consumer_recv_sql_message, response_cb_data);
 			if (socket_info == NULL) {
 				LOGE("_get_socket_info error !!!");
 				return DATACONTROL_ERROR_IO_ERROR;
