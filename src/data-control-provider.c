@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <dlog.h>
 #include <errno.h>
 #include <search.h>
 #include <stdlib.h>
@@ -29,6 +28,8 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 
+#include <dlog.h>
+#include <app.h>
 #include <appsvc/appsvc.h>
 #include <aul/aul.h>
 #include <bundle.h>
@@ -39,8 +40,9 @@
 #include "data-control-provider.h"
 #include "data-control-internal.h"
 
-#define ROW_ID_SIZE				32
-#define RESULT_PATH_MAX				512
+#define QUERY_MAXLEN			4096
+#define ROW_ID_SIZE			32
+#define RESULT_PATH_MAX			512
 
 #define RESULT_PAGE_NUMBER		"RESULT_PAGE_NUMBER"
 #define MAX_COUNT_PER_PAGE		"MAX_COUNT_PER_PAGE"
@@ -66,23 +68,76 @@
 #define PACKET_INDEX_MAP_PAGE_NO	2
 #define PACKET_INDEX_MAP_COUNT_PER_PAGE	3
 
+#define DATA_CONTROL_BUS_NAME "org.tizen.data_control_service"
+#define DATA_CONTROL_OBJECT_PATH "/org/tizen/data_control_service"
+#define DATA_CONTROL_INTERFACE_NAME "org.tizen.data_control_service"
+#define DATA_CONTROL_NOTI_DATA_CHANGED "noti_data_changed"
+#define DATA_CONTROL_NOTI_ADD_REMOVE_RESULT "noti_add_remove_result"
+
 static GHashTable *__request_table = NULL;
 static GHashTable *__socket_pair_hash = NULL;
+static sqlite3 *__provider_db = NULL;
+
+void *provider_sql_user_data;
+void *provider_map_user_data;
 
 /* static pthread_mutex_t provider_lock = PTHREAD_MUTEX_INITIALIZER; */
+typedef int (*provider_handler_cb) (bundle *b, int request_id, void *data);
 
-struct datacontrol_s {
-	char *provider_id;
-	char *data_id;
-};
-
-
-typedef int (*provider_handler_cb)(bundle *b, int request_id, void *data);
+typedef struct {
+	void *user_data;
+	int callback_id;
+	data_control_provider_changed_noti_consumer_filter_cb callback;
+} changed_noti_consumer_filter_info_s;
 
 static datacontrol_provider_sql_cb *provider_sql_cb = NULL;
 static datacontrol_provider_map_cb *provider_map_cb = NULL;
-static void *provider_map_user_data = NULL;
-static void *provider_sql_user_data = NULL;
+
+static GList *__noti_consumer_app_list = NULL;
+static GList *__noti_consumer_filter_info_list = NULL;
+
+static int __data_changed_filter_cb_info_compare_cb(gconstpointer a, gconstpointer b)
+{
+	changed_noti_consumer_filter_info_s *key1 = (changed_noti_consumer_filter_info_s *)a;
+	changed_noti_consumer_filter_info_s *key2 = (changed_noti_consumer_filter_info_s *)b;
+
+	return !(key1->callback_id == key2->callback_id);
+}
+
+static int __noti_consumer_app_list_compare_cb(gconstpointer a, gconstpointer b)
+{
+	datacontrol_consumer_info *info_a = (datacontrol_consumer_info *)a;
+	datacontrol_consumer_info *info_b = (datacontrol_consumer_info *)b;
+
+	return strcmp(info_a->unique_id, info_b->unique_id);
+}
+
+static void __free_consumer_info(const gchar *name)
+{
+	datacontrol_consumer_info find_key;
+	datacontrol_consumer_info *info;
+	GList *find_list = NULL;
+
+	find_key.unique_id = (char *)name;
+	find_list = g_list_find_custom(__noti_consumer_app_list, &find_key,
+			(GCompareFunc)__noti_consumer_app_list_compare_cb);
+	if (find_list == NULL) {
+		LOGI("__free_consumer_info %s not exist", name);
+		return;
+	}
+
+	info = (datacontrol_consumer_info *)find_list->data;
+	if (info->appid)
+		free(info->appid);
+	if (info->object_path)
+		free(info->object_path);
+	if (info->unique_id)
+		free(info->unique_id);
+	g_bus_unwatch_name(info->monitor_id);
+
+	__noti_consumer_app_list = g_list_remove(__noti_consumer_app_list, find_list->data);
+	LOGI("__free_consumer_info done");
+}
 
 static void __free_data(gpointer data)
 {
@@ -604,6 +659,19 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 
 		break;
 	}
+	case DATACONTROL_TYPE_ADD_DATA_CHANGED_CB:
+	{
+		const char *list[2];
+		char result_str[2] = {0,};
+		bool result = *(bool *)data;
+		snprintf(result_str, 2, "%d", result);
+
+		list[PACKET_INDEX_REQUEST_RESULT] = result_str;		/* request result */
+		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
+
+		bundle_add_str_array(res, OSP_K_ARG, list, 2);
+		break;
+	}
 	case DATACONTROL_TYPE_UNDEFINED:	/* DATACONTROL_TYPE_MAP_SET || ADD || REMOVE */
 	{
 		const char *list[2];
@@ -651,6 +719,281 @@ static int __send_result(bundle *b, datacontrol_request_type type, void *data)
 	return ret;
 }
 
+static int __insert_consumer_list_db_info(char *app_id, char *provider_id, char *data_id, char *unique_id, char *object_path)
+{
+	int r;
+	int result = DATACONTROL_ERROR_NONE;
+	char query[QUERY_MAXLEN];
+	sqlite3_stmt *stmt = NULL;
+	sqlite3_snprintf(QUERY_MAXLEN, query,
+			"INSERT OR REPLACE INTO data_control_consumer_path_list(app_id, provider_id, data_id, unique_id, object_path)" \
+			"VALUES (?,?,?,?,?)");
+	LOGI("consumer list db insert sql : %s", query);
+	r = sqlite3_prepare(__provider_db, query, sizeof(query), &stmt, NULL);
+	if (r != SQLITE_OK) {
+		LOGE("sqlite3_prepare error(%d , %d, %s)", r, sqlite3_extended_errcode(__provider_db), sqlite3_errmsg(__provider_db));
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 1, app_id, strlen(app_id), SQLITE_STATIC);
+	if (r != SQLITE_OK) {
+		LOGE("app_id bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 2, provider_id, strlen(provider_id), SQLITE_STATIC);
+	if (r != SQLITE_OK) {
+		LOGE("provider_id bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 3, data_id, strlen(data_id), SQLITE_STATIC);
+	if (r != SQLITE_OK) {
+		LOGE("data_id bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 4, unique_id, strlen(unique_id), SQLITE_STATIC);
+	if (r != SQLITE_OK) {
+		LOGE("unique_id bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 5, object_path, strlen(object_path), SQLITE_STATIC);
+	if (r != SQLITE_OK) {
+		LOGE("object_path bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_step(stmt);
+	if (r != SQLITE_DONE) {
+		LOGE("step error(%d) \n", r);
+		LOGE("sqlite3_step error(%d, %s)",
+				sqlite3_extended_errcode(__provider_db),
+				sqlite3_errmsg(__provider_db));
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+out :
+	if (stmt)
+		sqlite3_finalize(stmt);
+
+	return result;
+}
+
+static int __delete_consumer_list_db_info(char *object_path)
+{
+	int r;
+	char query[QUERY_MAXLEN];
+	int result = DATACONTROL_ERROR_NONE;
+	sqlite3_stmt *stmt = NULL;
+	sqlite3_snprintf(QUERY_MAXLEN, query,
+			"DELETE FROM data_control_consumer_path_list WHERE object_path = ?");
+	LOGI("consumer list db DELETE : %s", query);
+	r = sqlite3_prepare(__provider_db, query, sizeof(query), &stmt, NULL);
+	if (r != SQLITE_OK) {
+		LOGE("sqlite3_prepare error(%d , %d, %s)", r,
+				sqlite3_extended_errcode(__provider_db), sqlite3_errmsg(__provider_db));
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_bind_text(stmt, 1, object_path, strlen(object_path), SQLITE_STATIC);
+	if (r != SQLITE_OK) {
+		LOGE("caller bind error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	r = sqlite3_step(stmt);
+	if (r != SQLITE_DONE) {
+		LOGE("step error(%d) \n", r);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+out :
+	if (stmt)
+		sqlite3_finalize(stmt);
+
+	LOGI("__delete_consumer_list_db_info done");
+	return result;
+}
+
+static void __on_name_appeared(GDBusConnection *connection,
+		const gchar     *name,
+		const gchar     *name_owner,
+		gpointer         user_data)
+{
+	LOGI("name appeared : %s", name);
+}
+
+static void __on_name_vanished(GDBusConnection *connection,
+		const gchar     *name,
+		gpointer         user_data)
+{
+	LOGI("name vanished : %s", name);
+	__free_consumer_info(name);
+}
+
+static int __init_changed_noti_consumer_list()
+{
+	char *app_id = NULL;
+	char *unique_id = NULL;
+	char *object_path = NULL;
+	int ret = DATACONTROL_ERROR_NONE;
+	sqlite3_stmt *stmt = NULL;
+	char query[QUERY_MAXLEN];
+	datacontrol_consumer_info *consumer_info = NULL;
+
+	sqlite3_snprintf(QUERY_MAXLEN, query,
+			"SELECT app_id, object_path, unique_id " \
+			"FROM data_control_consumer_path_list");
+
+	LOGI("__init_changed_noti_consumer_list query : %s", query);
+	ret = sqlite3_prepare_v2(__provider_db, query, -1, &stmt, NULL);
+	if (ret != SQLITE_OK) {
+		LOGE("prepare stmt fail");
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+
+	while (SQLITE_ROW == sqlite3_step(stmt)) {
+		app_id = (char *)sqlite3_column_text(stmt, 0);
+		if (!app_id) {
+			LOGE("Failed to get package name\n");
+			continue;
+		}
+
+		object_path = (char *)sqlite3_column_text(stmt, 1);
+		if (!object_path) {
+			LOGE("Failed to get object_path\n");
+			continue;
+		}
+
+		unique_id = (char *)sqlite3_column_text(stmt, 2);
+		if (!unique_id) {
+			LOGE("Failed to get unique_id\n");
+			continue;
+		}
+		LOGI("sql : app_id : %s, object_path : %s, unique_id : %s",
+				app_id, object_path, unique_id);
+
+		consumer_info = (datacontrol_consumer_info *)
+			calloc(1, sizeof(datacontrol_consumer_info));
+		consumer_info->appid = strdup(app_id);
+		consumer_info->object_path = strdup(object_path);
+		consumer_info->unique_id = strdup(unique_id);
+
+		consumer_info->monitor_id = g_bus_watch_name_on_connection(
+				_get_dbus_connection(),
+				consumer_info->unique_id,
+				G_BUS_NAME_WATCHER_FLAGS_NONE,
+				__on_name_appeared,
+				__on_name_vanished,
+				consumer_info,
+				NULL);
+
+		LOGI("noti consumer_app_list append %s", consumer_info->object_path);
+		__noti_consumer_app_list =
+			g_list_append(__noti_consumer_app_list, consumer_info);
+	}
+	sqlite3_reset(stmt);
+	sqlite3_finalize(stmt);
+
+	return ret;
+}
+
+static int __create_consumer_list_db(char *consumer_id)
+{
+	char *db_path = NULL;
+	int ret = SQLITE_OK;
+	int open_flags = (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+	char *table_command =
+		"CREATE TABLE IF NOT EXISTS data_control_consumer_path_list" \
+		"(app_id TEXT NOT NULL, provider_id TEXT NOT NULL, data_id TEXT NOT NULL, " \
+		"unique_id TEXT NOT NULL, object_path TEXT NOT NULL, " \
+		"PRIMARY KEY(object_path))";
+
+	if (__provider_db == NULL) {
+		db_path = _get_encoded_db_path(consumer_id);
+		if (db_path == NULL)
+			return DATACONTROL_ERROR_IO_ERROR;
+		LOGI("data-control provider db path : %s", db_path);
+
+		ret = sqlite3_open_v2(db_path, &__provider_db, open_flags, NULL);
+		free(db_path);
+		if (ret != SQLITE_OK) {
+			LOGE("database creation failed with error: %d", ret);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+		ret = sqlite3_exec(__provider_db, table_command, NULL, NULL, NULL);
+		if (ret != SQLITE_OK) {
+			LOGE("database table creation failed with error: %d", ret);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+		ret = __init_changed_noti_consumer_list();
+		if (ret != DATACONTROL_ERROR_NONE) {
+			LOGE("__init_changed_noti_consumer_list fail %d", ret);
+			return ret;
+		}
+	}
+	return DATACONTROL_ERROR_NONE;
+}
+
+static int __set_consumer_app_list(
+		char *caller,
+		char *object_path,
+		char *unique_id)
+{
+	datacontrol_consumer_info find_key;
+	datacontrol_consumer_info *consumer_info;
+	GList *find_list = NULL;
+	int ret = DATACONTROL_ERROR_NONE;
+	LOGI("set consumer_app_list caller : %s, path : %s, unique_id : %s",
+			caller, object_path, unique_id);
+
+	find_key.unique_id = unique_id;
+	find_list = g_list_find_custom(__noti_consumer_app_list,
+			&find_key,
+			(GCompareFunc)__noti_consumer_app_list_compare_cb);
+
+	if (!find_list) {
+		consumer_info = (datacontrol_consumer_info *)
+			calloc(1, sizeof(datacontrol_consumer_info));
+		consumer_info->appid = strdup(caller);
+		consumer_info->object_path = strdup(object_path);
+		consumer_info->unique_id = strdup(unique_id);
+
+		consumer_info->monitor_id = g_bus_watch_name_on_connection(
+				_get_dbus_connection(),
+				consumer_info->unique_id,
+				G_BUS_NAME_WATCHER_FLAGS_NONE,
+				__on_name_appeared,
+				__on_name_vanished,
+				consumer_info,
+				NULL);
+		if (consumer_info->monitor_id == 0) {
+			LOGE("g_bus_watch_name_on_connection fail");
+
+			free(consumer_info->appid);
+			free(consumer_info->object_path);
+			free(consumer_info->unique_id);
+			free(consumer_info);
+
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+		LOGI("new noti consumer_app_list append %s", consumer_info->object_path);
+		__noti_consumer_app_list = g_list_append(__noti_consumer_app_list, consumer_info);
+	}
+	return ret;
+}
 
 int __provider_process(bundle *b, int fd)
 {
@@ -683,7 +1026,7 @@ int __provider_process(bundle *b, int fd)
 		}
 
 	} else {
-		LOGE("Invalid requeste type");
+		LOGE("Invalid request type");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
 	}
 
@@ -919,25 +1262,259 @@ error:
 	return FALSE;
 }
 
+static int __send_add_callback_result(
+		datacontrol_noti_type_e result_type,
+		char *unique_id,
+		char *path,
+		int callback_id,
+		int callback_result)
+{
+	GError *err = NULL;
+	int result = DATACONTROL_ERROR_NONE;
+	gboolean signal_result = TRUE;
+	LOGI("add callback_result type : %d, callback_id : %d, result : %d",
+			result_type, callback_id, callback_result);
+
+	signal_result = g_dbus_connection_emit_signal(
+			_get_dbus_connection(),
+			unique_id,
+			path,
+			DATA_CONTROL_INTERFACE_NAME,
+			DATA_CONTROL_NOTI_ADD_REMOVE_RESULT,
+			g_variant_new("(iii)",
+				result_type,
+				callback_id,
+				callback_result), &err);
+	if (signal_result == FALSE) {
+		LOGE("g_dbus_connection_emit_signal() is failed");
+		if (err != NULL) {
+			LOGE("g_dbus_connection_emit_signal() err : %s",
+					err->message);
+			g_error_free(err);
+		}
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+
+	LOGI("Send __send_add_callback_result done %d", result);
+	return result;
+}
+
+
+static int __get_sender_pid(const char *sender_name)
+{
+	GDBusMessage *msg = NULL;
+	GDBusMessage *reply = NULL;
+	GError *err = NULL;
+	GVariant *body;
+	int pid = 0;
+
+	msg = g_dbus_message_new_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
+			"org.freedesktop.DBus", "GetConnectionUnixProcessID");
+	if (!msg) {
+		LOGE("Can't allocate new method call");
+		goto out;
+	}
+
+	g_dbus_message_set_body(msg, g_variant_new("(s)", sender_name));
+	reply = g_dbus_connection_send_message_with_reply_sync(_get_dbus_connection(), msg,
+							G_DBUS_SEND_MESSAGE_FLAGS_NONE, -1, NULL, NULL, &err);
+
+	if (!reply) {
+		if (err != NULL) {
+			LOGE("Failed to get pid [%s]", err->message);
+			g_error_free(err);
+		}
+		goto out;
+	}
+
+	body = g_dbus_message_get_body(reply);
+	g_variant_get(body, "(u)", &pid);
+
+out:
+	if (msg)
+		g_object_unref(msg);
+	if (reply)
+		g_object_unref(reply);
+
+	return pid;
+}
+
+static int __provider_noti_process(bundle *b, datacontrol_request_type type)
+{
+	datacontrol_h provider = NULL;
+	bool noti_allow = true;
+	char *path = NULL;
+	int result = DATACONTROL_ERROR_NONE;
+	char *unique_id = NULL;
+	datacontrol_noti_type_e result_type = DATACONTROL_NOTI_CALLBACK_ADD_RESULT;
+	char *callback_id_str = NULL;
+	int callback_id = -1;
+	GList *filter_iter;
+	changed_noti_consumer_filter_info_s *filter_info;
+	char caller_app_id[255];
+	const char *pid_str;
+	int pid;
+	int sender_pid;
+
+	pid_str = bundle_get_val(b, AUL_K_CALLER_PID);
+	if (pid_str == NULL) {
+		LOGE("fail to get caller pid");
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+	pid = atoi(pid_str);
+	if (pid <= 1) {
+		LOGE("invalid caller pid %s", pid_str);
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+	if (aul_app_get_appid_bypid(pid, caller_app_id, sizeof(caller_app_id)) != 0) {
+		LOGE("Failed to get appid by pid");
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+
+	unique_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_UNIQUE_NAME);
+	LOGI("unique_id : %s", unique_id);
+	sender_pid = __get_sender_pid(unique_id);
+	if (sender_pid != pid) {
+		LOGE("invalid unique id. sender does not have unique_id %s", unique_id);
+		return DATACONTROL_ERROR_PERMISSION_DENIED;
+	}
+
+	result = __create_consumer_list_db(caller_app_id);
+	if (result != DATACONTROL_ERROR_NONE) {
+		LOGE("fail to create consumer list db");
+		return result;
+	}
+
+	provider = malloc(sizeof(struct datacontrol_s));
+	if (provider == NULL) {
+		LOGE("Out of memory. fail to alloc provider.");
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+	provider->provider_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_PROVIDER);
+	provider->data_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_DATA);
+	LOGI("Noti Provider ID: %s, data ID: %s, request type: %d", provider->provider_id, provider->data_id, type);
+	path = _get_encoded_path(provider, caller_app_id);
+	if (path == NULL) {
+		LOGE("can not get encoded path out of memory");
+		free(provider);
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+
+	callback_id_str = (char *)bundle_get_val(b, OSP_K_DATA_CHANGED_CALLBACK_ID);
+	if (callback_id_str == NULL) {
+		LOGE("callback_id is NULL");
+		result = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+	callback_id = atoi(callback_id_str);
+
+	switch (type) {
+	case DATACONTROL_TYPE_ADD_DATA_CHANGED_CB:
+	{
+		LOGI("DATACONTROL_TYPE_ADD_DATA_CHANGED_CB called");
+		result_type = DATACONTROL_NOTI_CALLBACK_ADD_RESULT;
+		filter_iter = g_list_first(__noti_consumer_filter_info_list);
+		for (; filter_iter != NULL; filter_iter = filter_iter->next) {
+			filter_info = (changed_noti_consumer_filter_info_s *)filter_iter->data;
+			noti_allow = filter_info->callback((data_control_h)provider, caller_app_id, filter_info->user_data);
+			if (!noti_allow)
+				break;
+		}
+		LOGI("provider_sql_consumer_filter_cb result %d", noti_allow);
+
+		if (noti_allow) {
+			result = __insert_consumer_list_db_info(
+					caller_app_id,
+					provider->provider_id,
+					provider->data_id,
+					unique_id,
+					path);
+			if (result != DATACONTROL_ERROR_NONE) {
+				LOGE("fail to set consumer list db info %d", result);
+				result = DATACONTROL_ERROR_PERMISSION_DENIED;
+				break;
+			}
+
+			result = __set_consumer_app_list(
+					caller_app_id,
+					path,
+					unique_id);
+			if (result != DATACONTROL_ERROR_NONE)
+				LOGE("fail to __set_consumer_app_list");
+
+		} else {
+			result = DATACONTROL_ERROR_PERMISSION_DENIED;
+			break;
+		}
+		break;
+	}
+	case DATACONTROL_TYPE_REMOVE_DATA_CHANGED_CB:
+	{
+		LOGI("DATACONTROL_NOTI_REMOVE_DATA_CHANGED_CB called");
+		result_type = DATACONTROL_NOTI_CALLBACK_REMOVE_RESULT;
+		if (__noti_consumer_app_list) {
+			__free_consumer_info(unique_id);
+			LOGI("unregister %s from __noti_consumer_app_list", unique_id);
+		} else {
+			LOGI("empty __consumer_app_list");
+		}
+		result = __delete_consumer_list_db_info(path);
+		if (result != DATACONTROL_ERROR_NONE) {
+			LOGE("__delete_consumer_list_db_info fail %d", result);
+			result = DATACONTROL_ERROR_IO_ERROR;
+			goto out;
+		}
+		break;
+	}
+	default:
+		break;
+	}
+
+out:
+	__send_add_callback_result(
+			result_type, unique_id, path, callback_id, result);
+
+	if (provider)
+		free(provider);
+
+	return result;
+}
+
 int __datacontrol_handler_cb(bundle *b, int request_id, void *data)
 {
 	datacontrol_socket_info *socket_info;
-	char *caller = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
-	char *callee = (char *)bundle_get_val(b, AUL_K_CALLEE_APPID);
+	int ret = DATACONTROL_ERROR_NONE;
 
-	LOGI("datacontrol_handler_cb");
-	socket_info = g_hash_table_lookup(__socket_pair_hash, caller);
+	const char *request_type = bundle_get_val(b, OSP_K_DATACONTROL_REQUEST_TYPE);
+	if (request_type == NULL) {
+		char *caller = (char *)bundle_get_val(b, AUL_K_CALLER_APPID);
+		char *callee = (char *)bundle_get_val(b, AUL_K_CALLEE_APPID);
 
-	if (socket_info != NULL)
-		g_hash_table_remove(__socket_pair_hash, caller);
+		socket_info = g_hash_table_lookup(__socket_pair_hash, caller);
 
-	socket_info = _get_socket_info(caller, callee, "provider", __provider_recv_message, caller);
-	if (socket_info == NULL)
-		return DATACONTROL_ERROR_IO_ERROR;
+		if (socket_info != NULL)
+			g_hash_table_remove(__socket_pair_hash, caller);
 
-	g_hash_table_insert(__socket_pair_hash, strdup(caller), socket_info);
+		socket_info = _add_watch_on_socket_info(caller, callee, "provider", __provider_recv_message, caller);
+		if (socket_info == NULL)
+			return DATACONTROL_ERROR_IO_ERROR;
 
-	return DATACONTROL_ERROR_NONE;
+		g_hash_table_insert(__socket_pair_hash, strdup(caller), socket_info);
+	} else {
+		/* Get the request type */
+		datacontrol_request_type type = atoi(request_type);
+		if (type == DATACONTROL_TYPE_ADD_DATA_CHANGED_CB ||
+				type == DATACONTROL_TYPE_REMOVE_DATA_CHANGED_CB) {
+			__provider_noti_process(b, type);
+		} else {
+			LOGE("Invalid data control request");
+			return DATACONTROL_ERROR_INVALID_PARAMETER;
+		}
+	}
+
+	return ret;
 }
 
 int datacontrol_provider_sql_register_cb(datacontrol_provider_sql_cb *callback, void *user_data)
@@ -1082,6 +1659,7 @@ int datacontrol_provider_send_insert_result(int request_id, long long row_id)
 	g_hash_table_remove(__request_table, &request_id);
 
 	return ret;
+
 }
 
 int datacontrol_provider_send_update_result(int request_id)
@@ -1205,6 +1783,173 @@ int datacontrol_provider_send_map_get_value_result(int request_id, char **value_
 
 	ret = __send_result(res, DATACONTROL_TYPE_MAP_GET, value_list);
 	g_hash_table_remove(__request_table, &request_id);
+
+	return ret;
+}
+
+static int __send_signal_to_consumer(datacontrol_h provider,
+		char *unique_id,
+		char *path,
+		datacontrol_noti_type_e type,
+		bundle *data)
+{
+	int result = DATACONTROL_ERROR_NONE;
+	int len = 0;
+	bundle_raw *raw = NULL;
+	GError *err = NULL;
+	gboolean signal_result = TRUE;
+
+	if (data) {
+		if (bundle_encode(data, &raw, &len) != BUNDLE_ERROR_NONE) {
+			LOGE("bundle_encode fail");
+			result = DATACONTROL_ERROR_IO_ERROR;
+			goto out;
+		}
+	}
+
+	LOGI("emit signal to object path %s", path);
+	signal_result = g_dbus_connection_emit_signal(
+			_get_dbus_connection(),
+			unique_id,
+			path,
+			DATA_CONTROL_INTERFACE_NAME,
+			DATA_CONTROL_NOTI_DATA_CHANGED,
+			g_variant_new("(isssi)",
+				type,
+				provider->provider_id,
+				provider->data_id,
+				((raw) ? (char *)raw : ""),
+				len), &err);
+
+	if (signal_result == FALSE) {
+		LOGE("g_dbus_connection_emit_signal() is failed");
+		if (err != NULL) {
+			LOGE("g_dbus_connection_emit_signal() err : %s",
+					err->message);
+			g_error_free(err);
+		}
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+
+out:
+	if (raw)
+		free(raw);
+
+	return result;
+}
+
+int datacontrol_provider_send_changed_noti(
+		datacontrol_h provider,
+		datacontrol_noti_type_e type,
+		bundle *data)
+{
+	int result = DATACONTROL_ERROR_NONE;
+	GList *consumer_iter = NULL;
+	datacontrol_consumer_info *consumer_info = NULL;
+
+	LOGE("datacontrol_provider_send_changed_notify %d, %d", g_list_length(__noti_consumer_app_list), type);
+	consumer_iter = g_list_first(__noti_consumer_app_list);
+	for (; consumer_iter != NULL; consumer_iter = consumer_iter->next) {
+		consumer_info = (datacontrol_consumer_info *)consumer_iter->data;
+		result = __send_signal_to_consumer(
+				provider,
+				consumer_info->unique_id,
+				consumer_info->object_path,
+				type,
+				data);
+		if (result != DATACONTROL_ERROR_NONE) {
+			LOGE("__send_signal_to_consumer fail : %d", result);
+			break;
+		}
+	}
+	return result;
+}
+
+int datacontrol_provider_add_changed_noti_consumer_filter_cb(
+		data_control_provider_changed_noti_consumer_filter_cb callback,
+		void *user_data,
+		int *callback_id)
+{
+	changed_noti_consumer_filter_info_s *filter_info = (changed_noti_consumer_filter_info_s *)calloc(1,
+			sizeof(changed_noti_consumer_filter_info_s));
+
+	*callback_id = _datacontrol_get_data_changed_filter_callback_id();
+
+	filter_info->callback_id = *callback_id;
+	filter_info->callback = callback;
+	filter_info->user_data = user_data;
+	__noti_consumer_filter_info_list = g_list_append(__noti_consumer_filter_info_list, filter_info);
+
+	return DATACONTROL_ERROR_NONE;
+}
+
+int datacontrol_provider_remove_changed_noti_consumer_filter_cb(int callback_id)
+{
+	GList *find_list;
+	changed_noti_consumer_filter_info_s filter_info;
+	filter_info.callback_id = callback_id;
+	find_list = g_list_find_custom(__noti_consumer_filter_info_list, &filter_info,
+			(GCompareFunc)__data_changed_filter_cb_info_compare_cb);
+	if (find_list != NULL)
+		__noti_consumer_filter_info_list = g_list_remove(__noti_consumer_filter_info_list, find_list->data);
+
+	return DATACONTROL_ERROR_NONE;
+}
+
+int datacontrol_provider_foreach_changed_noti_consumer_list(
+		datacontrol_h provider,
+		void *list_cb,
+		void *user_data)
+{
+	char *app_id = NULL;
+	int ret = DATACONTROL_ERROR_NONE;
+	sqlite3_stmt *stmt = NULL;
+	char query[QUERY_MAXLEN];
+	bool callback_result;
+	data_control_provider_changed_noti_consumer_list_cb consumer_list_cb;
+	consumer_list_cb = (data_control_provider_changed_noti_consumer_list_cb)list_cb;
+
+	sqlite3_snprintf(QUERY_MAXLEN, query,
+			"SELECT app_id " \
+			"FROM data_control_consumer_path_list WHERE provider_id = ? AND data_id = ?");
+	LOGI("get_changed_noti_consumer_list query : %s", query);
+
+	ret = sqlite3_prepare_v2(__provider_db, query, -1, &stmt, NULL);
+	if (ret != SQLITE_OK) {
+		LOGE("prepare stmt fail");
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	ret = sqlite3_bind_text(stmt, 1, provider->provider_id, -1, SQLITE_TRANSIENT);
+	if (ret != SQLITE_OK) {
+		LOGE("bind provider id fail: %s", sqlite3_errmsg(__provider_db));
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	ret = sqlite3_bind_text(stmt, 2, provider->data_id, -1, SQLITE_TRANSIENT);
+	if (ret != SQLITE_OK) {
+		LOGE("bind data id fail: %s", sqlite3_errmsg(__provider_db));
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	while (SQLITE_ROW == sqlite3_step(stmt)) {
+		app_id = (char *)sqlite3_column_text(stmt, 0);
+		if (!app_id) {
+			LOGE("Failed to get package name\n");
+			continue;
+		}
+		callback_result = consumer_list_cb((data_control_h)provider, app_id, user_data);
+		LOGI("app_id : %s, result : %d ", app_id, callback_result);
+		if (!callback_result)
+			break;
+	}
+out:
+	sqlite3_reset(stmt);
+	sqlite3_clear_bindings(stmt);
+	sqlite3_finalize(stmt);
 
 	return ret;
 }
