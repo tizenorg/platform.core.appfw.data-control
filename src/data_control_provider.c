@@ -19,11 +19,13 @@
 #include <dlog.h>
 #include <bundle.h>
 #include <data-control-provider.h>
+#include <data-control-types.h>
 
 #include "data_control_provider.h"
 #include "data_control_sql.h"
 #include "data_control_log.h"
 #include "data_control_internal.h"
+#include "data-control-internal.h"
 
 #define INSERT_STMT_CONST_LEN 25
 #define DELETE_STMT_CONST_LEN 12
@@ -33,11 +35,6 @@
 #define ORDER_CLS_CONST_LEN 10
 
 struct data_control_s {
-	char *provider_id;
-	char *data_id;
-};
-
-struct datacontrol_s {
 	char *provider_id;
 	char *data_id;
 };
@@ -569,3 +566,50 @@ EXPORT_API int data_control_provider_send_map_get_value_result(int request_id, c
 	return datacontrol_provider_send_map_get_value_result(request_id, value_list, value_count);
 }
 
+EXPORT_API int data_control_provider_add_data_change_consumer_filter_cb(
+		data_control_provider_changed_noti_consumer_filter_cb callback,
+		void *user_data,
+		int *callback_id)
+{
+	if (!callback)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_add_data_change_consumer_filter_cb(callback, user_data, callback_id);
+}
+
+EXPORT_API int data_control_provider_remove_data_change_consumer_filter_cb(int callback_id)
+{
+	if (callback_id < 1)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return  datacontrol_provider_remove_data_change_consumer_filter_cb(callback_id);
+}
+
+EXPORT_API int data_control_provider_send_changed_noti(
+		data_control_h provider,
+		data_control_data_change_type_e type,
+		bundle *data)
+{
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	if (type < DATA_CONTROL_DATA_CHANGE_SQL_UPDATE || type > DATA_CONTROL_DATA_CHANGE_MAP_REMOVE)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_send_changed_noti(
+			(datacontrol_h)provider,
+			_get_internal_noti_type(type),
+			data);
+}
+
+EXPORT_API int data_control_provider_foreach_data_change_consumer(
+		data_control_h provider,
+		data_control_provider_data_change_consumer_cb list_cb,
+		void *user_data)
+{
+	if (!provider || !list_cb)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_foreach_data_change_consumer(
+			(datacontrol_h)provider, list_cb, user_data);
+}
