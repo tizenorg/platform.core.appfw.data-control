@@ -35,6 +35,37 @@ extern "C" {
  * @{
  */
 
+
+/**
+ * @brief  Called when the application call data_control_provider_get_changed_noti_consumer_list.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider                 The provider handle
+ * @param[in]  consumer_appid           Consumer's appid which successfully add data changed callback
+ * @param[in]  user_data                The user data
+ */
+typedef void (*data_control_provider_changed_noti_consumer_list_cb)(
+    data_control_h provider,
+    char *consumer_appid,
+    void *user_data);
+
+/**
+ * @brief  Called when receive add data changed callback request.
+ * @remarks It returns whether allow add data changed callback to consumer_appid application or not.
+ * @remarks If it returns true, it means provider allow conusmer_appid application to add data changed callback.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider                 The provider handle
+ * @param[in]  consumer_appid           Consumer appid which request add data changed callback
+ * @param[in]  user_data                The user data
+ * @return  @c true on success
+ * @see  data_control_provider_add_changed_noti_consumer_filter_cb()
+ */
+typedef bool (*data_control_provider_changed_noti_consumer_filter_cb)(
+    data_control_h provider,
+    char *consumer_appid,
+    void *user_data);
+
 /**
  * @brief  Called when the insert request is received from an application using SQL-friendly interface based data control.
  * @since_tizen 2.3
@@ -463,6 +494,88 @@ bool data_control_provider_match_provider_id(data_control_h provider, const char
  * @exception DATA_CONTROL_ERROR_INVALID_PARAMETER	Invalid parameter
  */
 bool data_control_provider_match_data_id(data_control_h provider, const char *data_id);
+
+/**
+ * @brief  Send data changed notification to consumer apps which are successfully add data changed callback.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider		Target provider handle
+ * @param[in]  type   		Changed data type
+ * @param[in]  data		Customized data, intend to contains information about changed data.
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int data_control_provider_send_changed_notify(
+    data_control_h provider,
+    data_control_noti_type_e type,
+    bundle *data);
+
+/**
+ * @brief  Add consumer filter for add data changed callback process.
+ * @since_tizen 3.0
+ * @privlevel   public
+ * @privilege   %http://tizen.org/privilege/datasharing
+ *
+ * @param[in]  callback		Consumer filter callback, filtering consumers which try to add data changed callback.
+ * @param[in]  user_data	The user data to be passed to the list_cb function
+ * @param[out] callback_id	Added callback ID
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @see  data_control_provider_changed_noti_consumer_filter_cb()
+ */
+int data_control_provider_add_changed_noti_consumer_filter_cb(
+    data_control_provider_changed_noti_consumer_filter_cb callback,
+    void *user_data,
+    int *callback_id);
+
+/**
+ * @brief  Remove consumer filter for add data changed callback process.
+ * @since_tizen 3.0
+ * @privlevel   public
+ * @privilege   %http://tizen.org/privilege/datasharing
+ *
+ * @param[in]  callback_id	Target callback ID
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ */
+int data_control_provider_remove_changed_noti_consumer_filter_cb(int callback_id);
+
+/**
+ * @brief  Get consumer list which successfully add data changed callback.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider  Target provider handle
+ * @param[in]  list_cb   Callback for each consumer info
+ * @param[in]  user_data The user data to be passed to the list_cb function
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @see  data_control_provider_changed_noti_consumer_list_cb()
+ */
+int data_control_provider_get_changed_noti_consumer_list(
+    data_control_h provider,
+    data_control_provider_changed_noti_consumer_list_cb list_cb,
+    void *user_data);
 
 /**
 * @}
