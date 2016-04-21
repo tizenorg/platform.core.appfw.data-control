@@ -26,14 +26,62 @@ extern "C" {
 #endif
 
 /**
- * @file   data_control_provider.h
- * @brief  This is the header file for the data control provider.
+ * @file	data_control_provider.h
+ * @brief	This is the header file for the data control provider.\n
+ *	 	All callbacks are called in the main loop context, unless stated otherwise.
  */
 
 /**
  * @addtogroup CAPI_DATA_CONTROL_PROVIDER_MODULE
  * @{
  */
+
+
+/**
+ * @brief  Called for each application which successfully added a data change callback.
+ * @since_tizen 3.0
+ *
+ * @param[in]  provider                 The provider handle @a provider is valid only inside this function. \n
+ *					To use outside the callback, make a copy. @a provider should not be freed.
+ * @param[in]  consumer_appid           The id of the consumer application @a consumer_appid is valid only inside this function. \n
+ * 					To use outside the callback, make a copy. @a consumer_appid should not be freed.
+ * @param[in]  user_data                The user data @a user_data is valid only inside this function. \n
+ * 					To use outside the callback, make a copy. @a user_data should not be freed.
+ * @return @c true to continue with the next iteration of the loop,
+ *         otherwise @c false to break out of the loop
+ *
+ * @pre  data_control_provider_foreach_data_changed_noti_consumer_list() must be called to invoke this callback.
+ * @see  data_control_provider_foreach_data_changed_noti_consumer_list()
+ */
+typedef bool (*data_control_provider_changed_noti_consumer_list_cb)(
+		data_control_h provider,
+		char *consumer_appid,
+		void *user_data);
+
+/**
+ * @brief  Called when a consumer requests a data change callback addition.
+ * @since_tizen 3.0
+ * @details	The callback decides - through the return value - whether a consumer application should be allowed to add a data change callback. \n
+ * 		If it returns true, it means the application should be allowed to do so, if it returns false, it means it should be denied.
+ *
+ * @param[in]  provider                 The provider handle @a provider is valid only inside this function. \n
+ *					To use outside the callback, make a copy. @a provider should not be freed.
+ * @param[in]  consumer_appid           Consumer appid which request add data changed callback @a consumer_appid is valid only inside this function. \n
+ *					To use outside the callback, make a copy. @a consumer_appid should not be freed.
+ * @param[in]  user_data                The user data @a user_data is valid only inside this function. \n
+ * 					To use outside the callback, make a copy. @a user_data should not be freed.
+ * @return  @c A boolean value indicating whether the consumer application should be allowed to add data change callbacks. true on success.
+ *
+ * @pre The callback must be registered using data_control_provider_add_changed_noti_consumer_filter_cb(). \n
+ * data_control_add_data_changed_cb() must be called to invoke this callback.
+ *
+ * @see  data_control_provider_add_changed_noti_consumer_filter_cb()
+ * @see  data_control_provider_remove_changed_noti_consumer_filter_cb()
+ */
+typedef bool (*data_control_provider_changed_noti_consumer_filter_cb)(
+		data_control_h provider,
+		char *consumer_appid,
+		void *user_data);
 
 /**
  * @brief  Called when the insert request is received from an application using SQL-friendly interface based data control.
@@ -463,6 +511,96 @@ bool data_control_provider_match_provider_id(data_control_h provider, const char
  * @exception DATA_CONTROL_ERROR_INVALID_PARAMETER	Invalid parameter
  */
 bool data_control_provider_match_data_id(data_control_h provider, const char *data_id);
+
+/**
+ * @brief  Sends a data change notification to consumer applications which have successfully added a data change callback.
+ * @details If the function is successful, data_control_data_changed_cb() callback will be called under certain conditions.
+ * @since_tizen 3.0
+ * @privlevel   public
+ * @privilege   %http://tizen.org/privilege/datasharing
+ *
+ * @param[in]  provider		Target provider handle
+ * @param[in]  type   		Changed data type
+ * @param[in]  data		Customized information about changed data
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ *
+ * @pre  The consumer should call data_control_add_data_changed_cb() to receive data change notifications,
+ * @see  data_control_data_changed_cb()
+ * @see  data_control_add_data_changed_cb()
+ */
+int data_control_provider_send_changed_noti(
+		data_control_h provider,
+		data_control_noti_type_e type,
+		bundle *data);
+
+/**
+ * @brief  Adds a consumer filter for the data changed callback addition process.
+ * @since_tizen 3.0
+ * @remarks	If the provider does not add any filters by calling this function, all requests to add a data change callback will be granted. \n
+ *		If filters are added, and at least one filter returns false for a consumer application, the application will not be able to add data change callbacks.
+ *
+ * @param[in]  callback		Consumer filter callback, filtering consumers which try to add data changed callback
+ * @param[in]  user_data	The user data to be passed to the list_cb function
+ * @param[out] callback_id	Added callback ID
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @see  data_control_provider_changed_noti_consumer_filter_cb()
+ */
+int data_control_provider_add_changed_noti_consumer_filter_cb(
+		data_control_provider_changed_noti_consumer_filter_cb callback,
+		void *user_data,
+		int *callback_id);
+
+/**
+ * @brief  Removes a consumer filter for the data changed callback addition process.
+ * @since_tizen 3.0
+ *
+ * @param[in]  callback_id	Target callback ID
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ */
+int data_control_provider_remove_changed_noti_consumer_filter_cb(int callback_id);
+
+/**
+ * @brief  Retrieves ids of all applications which receive data change notifications from a given provider.
+ * @since_tizen 3.0
+ * @details	This function calls data_control_provider_changed_noti_consumer_list_cb() once for each provider's notification target consumer id. \n
+ *		If the data_control_provider_changed_noti_consumer_list_cb() callback function returns @c false, then iteration will be finished.
+ *
+ * @param[in]  provider  Target provider handle
+ * @param[in]  list_cb   The iteration callback function
+ * @param[in]  user_data The user data to be passed to the list_cb function
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @post This function invokes data_control_provider_changed_noti_consumer_list_cb().
+ * @see  data_control_provider_changed_noti_consumer_list_cb()
+ */
+int data_control_provider_foreach_data_changed_noti_consumer_list(
+		data_control_h provider,
+		data_control_provider_changed_noti_consumer_list_cb list_cb,
+		void *user_data);
 
 /**
 * @}

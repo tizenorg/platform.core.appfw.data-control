@@ -62,6 +62,8 @@ install LICENSE.APLv2  %{buildroot}/usr/share/license/%{name}
 %files
 %{_libdir}/lib%{name}.so.*
 %{_libdir}/libcapi-data-control.so.*
+%config %{_sysconfdir}/dbus-1/session.d/data-control.conf
+
 %manifest %{name}.manifest
 /usr/share/license/%{name}
 

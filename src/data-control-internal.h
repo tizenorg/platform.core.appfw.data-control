@@ -19,6 +19,7 @@
  * @brief	This is the header file for private keys of the data-control.
  */
 #include <gio/gio.h>
+#include "data_control_types.h"
 
 #ifndef _APPFW_DATA_CONTROL_INTERNAL_H_
 #define _APPFW_DATA_CONTROL_INTERNAL_H_
@@ -39,6 +40,8 @@
 #define OSP_K_DATACONTROL_REQUEST_TYPE  "__OSP_DATACONTROL_REQUEST_TYPE__"
 #define OSP_K_DATACONTROL_PROTOCOL_VERSION	"__OSP_DATACONTROL_PROTOCOL_VERSION__"
 #define OSP_K_CALLER_TYPE   "__OSP_CALLER_TYPE__"
+#define OSP_K_DATACONTROL_UNIQUE_NAME	"__OSP_DATACONTROL_UNIQUE_NAME__"
+#define OSP_K_DATA_CHANGED_CALLBACK_ID    "__OSP_DATA_CHANGED_CALLBACK_ID__"
 
 #define DATACONTROL_SELECT_STATEMENT	"DATACONTROL_SELECT_STATEMENT"
 
@@ -57,19 +60,6 @@
 /**
  * @brief Enumerations of different type of data control requests.
  */
-typedef enum {
-	DATACONTROL_TYPE_ERROR = -1,
-	DATACONTROL_TYPE_UNDEFINED,
-	DATACONTROL_TYPE_SQL_SELECT,
-	DATACONTROL_TYPE_SQL_INSERT,
-	DATACONTROL_TYPE_SQL_UPDATE,
-	DATACONTROL_TYPE_SQL_DELETE,
-	DATACONTROL_TYPE_MAP_GET,
-	DATACONTROL_TYPE_MAP_SET,
-	DATACONTROL_TYPE_MAP_ADD,
-	DATACONTROL_TYPE_MAP_REMOVE,
-	DATACONTROL_TYPE_MAX = 255
-} datacontrol_request_type;
 
 typedef struct datacontrol_pkt {
 	int len;
@@ -87,6 +77,18 @@ typedef struct datacontrol_consumer_request {
 	datacontrol_request_type type;
 } datacontrol_consumer_request_info;
 
+typedef struct datacontrol_consumer {
+	int monitor_id;
+	char *appid;
+	char *object_path;
+	char *unique_id;
+} datacontrol_consumer_info;
+
+struct datacontrol_s {
+	char *provider_id;
+	char *data_id;
+};
+
 int _consumer_request_compare_cb(gconstpointer a, gconstpointer b);
 int _datacontrol_sql_set_cursor(const char *path);
 char *_datacontrol_create_select_statement(char *data_id,
@@ -94,21 +96,30 @@ char *_datacontrol_create_select_statement(char *data_id,
 		const char *where, const char *order, int page_number,
 		int count_per_page);
 int _datacontrol_create_request_id(void);
-int _datacontrol_send_async(int sockfd, bundle *kb,
-		datacontrol_request_type type, void *data);
-int _read_socket(int fd, char *buffer, unsigned int nbytes,
-		unsigned int *bytes_read);
-int _write_socket(int fd, void *buffer, unsigned int nbytes,
-		unsigned int *bytes_write);
-gboolean _datacontrol_recv_message(GIOChannel *channel, GIOCondition cond,
-		gpointer data);
-int _get_gdbus_shared_connection(GDBusConnection **connection,
-		char *provider_id);
+int _datacontrol_get_data_changed_callback_id(void);
+int _datacontrol_get_data_changed_filter_callback_id(void);
+
+int _datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type type, void *data);
+int _read_socket(int fd, char *buffer, unsigned int nbytes, unsigned int *bytes_read);
+int _write_socket(int fd, void *buffer, unsigned int nbytes, unsigned int *bytes_write);
+
+gboolean _datacontrol_recv_message(GIOChannel *channel, GIOCondition cond, gpointer data);
+int _get_gdbus_shared_connection(GDBusConnection **connection, char *provider_id);
 void _socket_info_free(gpointer socket);
-datacontrol_socket_info *_get_socket_info(const char *caller_id,
-		const char *callee_id, const char *type, GIOFunc cb,
-		void *data);
+datacontrol_socket_info *_add_watch_on_socket_info(const char *caller_id, const char *callee_id, const char *type, GIOFunc cb, void *data);
 int _request_appsvc_run(const char *caller_id, const char *callee_id);
+
+GDBusConnection *_get_dbus_connection();
+int _dbus_signal_init(int *monitor_id, char *path, GDBusSignalCallback callback);
+char *_get_encoded_path(datacontrol_h provider, char *consumer_appid);
+char *_get_encoded_db_path(char *consumer_appid);
+
+int _create_datacontrol_h(datacontrol_h *provider);
+int _destroy_datacontrol_h(datacontrol_h provider);
+int _set_provider_id(datacontrol_h provider, const char *provider_id);
+int _set_data_id(datacontrol_h provider, const char *data_id);
+datacontrol_noti_type_e _get_internal_noti_type(data_control_noti_type_e type);
+data_control_noti_type_e _get_public_noti_type(datacontrol_noti_type_e type);
 
 #endif /* _APPFW_DATA_CONTROL_INTERNAL_H_ */
 
