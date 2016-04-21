@@ -19,11 +19,13 @@
 #include <dlog.h>
 #include <bundle.h>
 #include <data-control-provider.h>
+#include <data-control-types.h>
 
 #include "data_control_provider.h"
 #include "data_control_sql.h"
 #include "data_control_log.h"
 #include "data_control_internal.h"
+#include "data-control-internal.h"
 
 #define INSERT_STMT_CONST_LEN 25
 #define DELETE_STMT_CONST_LEN 12
@@ -33,11 +35,6 @@
 #define ORDER_CLS_CONST_LEN 10
 
 struct data_control_s {
-	char *provider_id;
-	char *data_id;
-};
-
-struct datacontrol_s {
 	char *provider_id;
 	char *data_id;
 };
@@ -55,7 +52,7 @@ static data_control_provider_map_cb map_provider_callback;
 datacontrol_provider_sql_cb sql_internal_callback;
 datacontrol_provider_map_cb map_internal_callback;
 
-static void __sql_insert_request_cb(int request_id, datacontrol_h provider, bundle *insert_data, void *user_data)
+void __sql_insert_request_cb(int request_id, datacontrol_h provider, bundle *insert_data, void *user_data)
 {
 	_LOGI("sql_insert_request");
 
@@ -63,7 +60,7 @@ static void __sql_insert_request_cb(int request_id, datacontrol_h provider, bund
 		sql_provider_callback.insert_cb(request_id, (data_control_h)provider, insert_data, user_data);
 }
 
-static void __sql_update_request_cb(int request_id, datacontrol_h provider, bundle *update_data, const char *where, void *user_data)
+void __sql_update_request_cb(int request_id, datacontrol_h provider, bundle *update_data, const char *where, void *user_data)
 {
 	_LOGI("sql_update_request");
 
@@ -71,7 +68,7 @@ static void __sql_update_request_cb(int request_id, datacontrol_h provider, bund
 		sql_provider_callback.update_cb(request_id, (data_control_h)provider, update_data, where, user_data);
 }
 
-static void __sql_delete_request_cb(int request_id, datacontrol_h provider, const char *where, void *user_data)
+void __sql_delete_request_cb(int request_id, datacontrol_h provider, const char *where, void *user_data)
 {
 	_LOGI("sql_delete_request");
 
@@ -79,7 +76,7 @@ static void __sql_delete_request_cb(int request_id, datacontrol_h provider, cons
 		sql_provider_callback.delete_cb(request_id, (data_control_h)provider, where, user_data);
 }
 
-static void __sql_select_request_cb(int request_id, datacontrol_h provider, const char **column_list, int column_count, const char *where, const char *order, void *user_data)
+void __sql_select_request_cb(int request_id, datacontrol_h provider, const char **column_list, int column_count, const char *where, const char *order, void *user_data)
 {
 	_LOGI("sql_select_request");
 
@@ -87,7 +84,7 @@ static void __sql_select_request_cb(int request_id, datacontrol_h provider, cons
 		sql_provider_callback.select_cb(request_id, (data_control_h)provider, column_list, column_count, where, order, user_data);
 }
 
-static void __map_get_request_cb(int request_id, datacontrol_h provider, const char *key, void *user_data)
+void __map_get_request_cb(int request_id, datacontrol_h provider, const char *key, void *user_data)
 {
 	_LOGI("map_get_request");
 
@@ -95,7 +92,7 @@ static void __map_get_request_cb(int request_id, datacontrol_h provider, const c
 		map_provider_callback.get_cb(request_id, (data_control_h)provider, key, user_data);
 }
 
-static void __map_set_request_cb(int request_id, datacontrol_h provider, const char *key, const char *old_value, const char *new_value, void *user_data)
+void __map_set_request_cb(int request_id, datacontrol_h provider, const char *key, const char *old_value, const char *new_value, void *user_data)
 {
 	_LOGI("map_set_request");
 
@@ -103,7 +100,7 @@ static void __map_set_request_cb(int request_id, datacontrol_h provider, const c
 		map_provider_callback.set_cb(request_id, (data_control_h)provider, key, old_value, new_value, user_data);
 }
 
-static void __map_add_request_cb(int request_id, datacontrol_h provider, const char *key, const char *value, void *user_data)
+void __map_add_request_cb(int request_id, datacontrol_h provider, const char *key, const char *value, void *user_data)
 {
 	_LOGI("map_add_request");
 
@@ -111,7 +108,7 @@ static void __map_add_request_cb(int request_id, datacontrol_h provider, const c
 		map_provider_callback.add_cb(request_id, (data_control_h)provider, key, value, user_data);
 }
 
-static void __map_remove_request_cb(int request_id, datacontrol_h provider, const char *key, const char *value, void *user_data)
+void __map_remove_request_cb(int request_id, datacontrol_h provider, const char *key, const char *value, void *user_data)
 {
 	_LOGI("map_remove_request");
 
@@ -569,3 +566,50 @@ EXPORT_API int data_control_provider_send_map_get_value_result(int request_id, c
 	return datacontrol_provider_send_map_get_value_result(request_id, value_list, value_count);
 }
 
+EXPORT_API int data_control_provider_add_changed_noti_consumer_filter_cb(
+		data_control_provider_changed_noti_consumer_filter_cb callback,
+		void *user_data,
+		int *callback_id)
+{
+	if (!callback)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_add_changed_noti_consumer_filter_cb(callback, user_data, callback_id);
+}
+
+EXPORT_API int data_control_provider_remove_changed_noti_consumer_filter_cb(int callback_id)
+{
+	if (callback_id < 1)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_remove_changed_noti_consumer_filter_cb(callback_id);
+}
+
+EXPORT_API int data_control_provider_send_changed_noti(
+		data_control_h provider,
+		data_control_noti_type_e type,
+		bundle *data)
+{
+	if (!provider)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	if (type < DATA_CONTROL_NOTI_SQL_UPDATE || type > DATA_CONTROL_NOTI_MAP_REMOVE)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_send_changed_noti(
+			(datacontrol_h)provider,
+			_get_internal_noti_type(type),
+			data);
+}
+
+EXPORT_API int data_control_provider_foreach_changed_noti_consumer_list(
+		data_control_h provider,
+		data_control_provider_changed_noti_consumer_list_cb list_cb,
+		void *user_data)
+{
+	if (!provider || !list_cb)
+		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
+
+	return datacontrol_provider_foreach_changed_noti_consumer_list(
+			(datacontrol_h)provider, list_cb, user_data);
+}
