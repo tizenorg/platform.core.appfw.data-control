@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+        "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+	<policy user="user">
+	</policy>
+	<policy context="default">
+		<check receive_type="signal" receive_interface="org.tizen.data_control_service" privilege="http://tizen.org/privilege/datasharing" />
+		<check send_type="signal" send_interface="org.tizen.data_control_service" privilege="http://tizen.org/privilege/datasharing" />
+	</policy>
+</busconfig>
