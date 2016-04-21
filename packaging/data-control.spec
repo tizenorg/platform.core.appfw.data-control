@@ -11,6 +11,7 @@ BuildRequires:  pkgconfig(bundle)
 BuildRequires:  pkgconfig(appsvc)
 BuildRequires:  pkgconfig(pkgmgr-info)
 BuildRequires:  pkgconfig(glib-2.0)
+BuildRequires:  pkgconfig(capi-appfw-application)
 BuildRequires:  pkgconfig(capi-base-common)
 BuildRequires:  pkgconfig(cynara-client)
 BuildRequires:  pkgconfig(sqlite3)
@@ -62,6 +63,8 @@ install LICENSE.APLv2  %{buildroot}/usr/share/license/%{name}
 %files
 %{_libdir}/lib%{name}.so.*
 %{_libdir}/libcapi-data-control.so.*
+%config %{_sysconfdir}/dbus-1/session.d/data-control.conf
+
 %manifest %{name}.manifest
 /usr/share/license/%{name}
 
