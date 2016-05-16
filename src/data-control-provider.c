@@ -418,7 +418,7 @@ int __datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type ty
 	bundle_raw *kb_data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
 	int datalen = 0;
-	char *buf = NULL;
+	char *buf;
 	int total_len = 0;
 	unsigned int nb = 0;
 
@@ -432,6 +432,10 @@ int __datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type ty
 
 	/* encoded bundle + encoded bundle len */
 	buf = (char *)calloc(datalen + 4, sizeof(char));
+	if (buf == NULL) {
+		LOGE("buf calloc error");
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
 	memcpy(buf, &datalen, sizeof(datalen));
 	memcpy(buf + sizeof(datalen), kb_data, datalen);
 
@@ -450,8 +454,7 @@ int __datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type ty
 		ret = __send_get_value_result(sockfd, kb, data);
 
 out:
-	if (buf)
-		free(buf);
+	free(buf);
 	bundle_free_encoded_rawdata(&kb_data);
 
 	return ret;
