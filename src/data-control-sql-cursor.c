@@ -587,18 +587,19 @@ int datacontrol_sql_remove_cursor(resultset_cursor *cursor)
 {
 	int ret;
 
+	if (cursor == NULL)
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+
 	close(cursor->resultset_fd);
-
-	ret = remove(cursor->resultset_path);
-	if (ret == -1)
-		LOGE("unable to remove map query result file: %d", ret);
-
+	if (cursor->resultset_path) {
+		ret = remove(cursor->resultset_path);
+		if (ret == -1)
+			LOGE("unable to remove map query result file: %d", ret);
+		free(cursor->resultset_path);
+	}
 	if (cursor->row_offset_list)
 		free(cursor->row_offset_list);
-	if (cursor->resultset_path)
-		free(cursor->resultset_path);
-	if (cursor)
-		free(cursor);
+	free(cursor);
 
 	return DATACONTROL_ERROR_NONE;
 }
