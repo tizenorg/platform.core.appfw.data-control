@@ -41,6 +41,15 @@ static GHashTable *response_table = NULL;
 
 datacontrol_sql_response_cb datacontrol_sql_cb;
 
+static void __sql_bulk_insert_response(int req_id, datacontrol_h provider, data_control_bulk_result_data_h bulk_results, bool provider_result, const char *error, void *user_data)
+{
+	_LOGI("sql_bulk_insert_response");
+
+	data_control_sql_response_cb *callback = (data_control_sql_response_cb *)g_hash_table_lookup(response_table, provider->provider_id);
+	if (callback)
+		callback->bulk_insert_cb(req_id, (data_control_h)provider, bulk_results, provider_result, error, user_data);
+}
+
 static void __sql_insert_response(int req_id, datacontrol_h provider, long long insert_rowid, bool provider_result, const char *error, void *user_data)
 {
 	_LOGI("sql_insert_response");
@@ -89,6 +98,7 @@ static void __initialize(void)
 {
 	response_table = g_hash_table_new_full(g_str_hash, g_str_equal, __free_data, __free_data);
 
+	datacontrol_sql_cb.bulk_insert = __sql_bulk_insert_response;
 	datacontrol_sql_cb.insert = __sql_insert_response;
 	datacontrol_sql_cb.delete = __sql_delete_response;
 	datacontrol_sql_cb.select = __sql_select_response;
@@ -158,6 +168,16 @@ EXPORT_API int data_control_sql_unregister_response_cb(data_control_h provider)
 		g_hash_table_remove(response_table, provider->provider_id);
 
 	return datacontrol_sql_unregister_response_cb((datacontrol_h)provider);
+}
+
+EXPORT_API int data_control_sql_bulk_insert(data_control_h provider, data_control_bulk_data_h bulk_data_h, int *request_id)
+{
+
+	int retval = datacontrol_check_privilege(PRIVILEGE_CONSUMER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
+	return datacontrol_sql_bulk_insert((datacontrol_h)provider, bulk_data_h, request_id);
 }
 
 EXPORT_API int data_control_sql_insert(data_control_h provider, const bundle *insert_data, int *request_id)
