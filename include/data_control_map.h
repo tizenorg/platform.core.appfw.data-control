@@ -33,6 +33,22 @@ extern "C" {
  * @{
  */
 
+ /**
+ * @brief  Called when the response is received bulk add operation results from the key-value structured data control provider.
+ * @since_tizen 3.0
+ *
+ * @param[in]  request_id       The request ID that identifies the data control
+ * @param[in]  provider         The provider handle
+ * @param[in]  bulk_results  	The result data for each add request
+ * @param[in]  provider_result  Set to @c true if the data control provider successfully processed, \n
+ *                              otherwise set to @c false
+ * @param[in]  error            The error message from the data control provider
+ * @param[in]  user_data        The user data passed from the register function
+ */
+typedef void (*data_control_map_bulk_add_response_cb)(int request_id,
+		data_control_h provider, data_control_bulk_result_data_h bulk_results, bool provider_result,
+		const char *error, void *user_data);
+
 /**
  * @brief  Called when the result value list is received from the key-value structured data control provider.
  * @since_tizen 2.3
@@ -122,6 +138,7 @@ typedef struct {
 	data_control_map_set_response_cb set_cb; /**< This callback function is called when the response is received for a setting value from the key-value structured data control provider. */
 	data_control_map_add_response_cb add_cb; /**< This callback function is called when the response is received for a adding value from the key-value structured data control provider. */
 	data_control_map_remove_response_cb remove_cb; /**< This callback function is called when the response is for a removing value received from the key-value structured data control provider. */
+	data_control_map_bulk_add_response_cb bulk_add_cb; /**< This callback function is called when the response is for a removing value received from the key-value structured data control provider. */
 } data_control_map_response_cb;
 
 /**
@@ -609,6 +626,89 @@ int data_control_map_add(data_control_h provider, const char *key, const char *v
  * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
  */
 int data_control_map_remove(data_control_h provider, const char *key, const char *value, int *request_id);
+
+/**
+ * @brief  Adds multiple key, value data in one request.
+ * @since_tizen 3.0
+ * @privlevel   public
+ * @privilege   %http://tizen.org/privilege/datasharing \n
+ *              %http://tizen.org/privilege/appmanager.launch
+ *
+ * @remarks If you want to use this api, you must add privileges.
+ * @remarks The following example demonstrates how to use the %data_control_map_add() method.
+ *
+ * @code
+ *
+ *  void map_bulk_add_response_cb(int request_id, data_control_h provider, data_control_bulk_result_data_h bulk_results,
+ *		bool provider_result, const char *error, void *user_data) {
+ *      if (provider_result) {
+ *          LOGI("The add operation is successful");
+ *      }
+ *      else {
+ *          LOGI("The add operation for the request %d is failed. error message: %s", request_id, error);
+ *      }
+ *  }
+ *
+ *  data_control_map_response_cb map_callback;
+ *
+ *  int main()
+ *  {
+ *
+ *		int req_id;
+ * 		data_control_bulk_data_h bulk_data_h;
+ * 		bundle *b1;
+ * 		bundle *b2;
+ *		int result = 0;
+ *		int req_id = 0;
+ *		int count;
+ *
+ *		map_callback.bulk_add_cb = map_bulk_add_response_cb;
+ *		result = data_control_map_register_response_cb(provider, &map_callback, void *user_data);
+ *		if (result != DATA_CONTROL_ERROR_NONE) {
+ *			LOGE("Registering the callback function is failed with error: %d", result);
+ *			return result;
+ *		}
+ *
+ *		b1 = bundle_create();
+ *		bundle_add_str(b1, "key", "test key");
+ * 		bundle_add_str(b1, "value", "test value");
+ * 		b2 = bundle_create();
+ * 		bundle_add_str(b2, "key", "test key2");
+ * 		bundle_add_str(b2, "value", "test value2");
+ *
+ *		data_control_bulk_data_create(&bulk_data_h);
+ *		data_control_bulk_data_add(bulk_data_h, b1);
+ * 		data_control_bulk_data_add(bulk_data_h, b2);
+ *
+ *		data_control_bulk_data_get_count(bulk_data_h, &count);
+ *		dlog_print(DLOG_INFO, LOG_TAG, "bulk add count %d ", count);
+ *
+ * 		data_control_map_bulk_add(provider, bulk_data_h, &req_id);
+ *		data_control_bulk_data_destroy(bulk_data_h);
+ *
+ * 		bundle_free(b1);
+ * 		bundle_free(b2);
+ *      return result;
+ *  }
+ *
+ * @endcode
+
+ * @param[in]   provider    The provider handle
+ * @param[in]   key         The key of the value to add
+ * @param[in]   value       The value to add
+ * @param[out]  request_id  The request ID
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_MAX_EXCEEDED      Too long argument
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int data_control_map_bulk_add(data_control_h provider, data_control_bulk_data_h bulk_data_h, int *request_id);
 
 /**
 * @}

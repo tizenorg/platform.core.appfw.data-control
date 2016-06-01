@@ -25,6 +25,8 @@
 #include <data-control-sql.h>
 #include <data-control-sql-cursor.h>
 #include <data-control-provider.h>
+#include <data-control-noti.h>
+#include <data-control-bulk.h>
 
 #endif /* _APPFW_DATA_CONTROL_H_ */
 
