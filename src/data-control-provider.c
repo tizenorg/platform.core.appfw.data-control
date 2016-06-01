@@ -38,6 +38,7 @@
 #include "data-control-sql.h"
 #include "data-control-provider.h"
 #include "data-control-internal.h"
+#include "data-control-bulk.h"
 
 #define QUERY_MAXLEN			4096
 #define ROW_ID_SIZE			32
@@ -478,6 +479,60 @@ static int __send_get_value_result(int fd, bundle *b, void *data)
 	return DATACONTROL_ERROR_NONE;
 }
 
+
+static int __send_bulk_result(int fd, void *data)
+{
+	data_control_bulk_result_data_h bulk_results = (data_control_bulk_result_data_h)data;
+	int count;
+	int i;
+	int result;
+	bundle_raw *encode_data = NULL;
+	int encode_datalen = 0;
+	bundle *result_data;
+	unsigned int nb = 0;
+
+	datacontrol_bulk_result_data_get_count(bulk_results, &count);
+	if (_write_socket(fd, &count, sizeof(int), &nb) != DATACONTROL_ERROR_NONE) {
+		LOGE("Writing a result count to a file descriptor is failed. errno = %d", errno);
+		return DATACONTROL_ERROR_IO_ERROR;
+	}
+	LOGE("__send_bulk_result %d", count);
+
+	for (i = 0; i < count; i++) {
+		datacontrol_bulk_result_data_get_result_data(bulk_results, i, &result_data, &result);
+		if (_write_socket(fd, &result, sizeof(int), &nb) != DATACONTROL_ERROR_NONE) {
+			LOGE("Writing a result to a file descriptor is failed. errno = %d", errno);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+
+		if (result_data != NULL) {
+			bundle_encode_raw(result_data, &encode_data, &encode_datalen);
+			if (encode_data == NULL) {
+				LOGE("bundle encode error");
+				return DATACONTROL_ERROR_OUT_OF_MEMORY;
+			}
+		}
+
+		if (_write_socket(fd, &encode_datalen, sizeof(int), &nb) != DATACONTROL_ERROR_NONE) {
+			LOGE("Writing a encode_datalen to a file descriptor is failed. errno = %d", errno);
+			free(encode_data);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+
+		if (_write_socket(fd, encode_data, encode_datalen, &nb) != DATACONTROL_ERROR_NONE) {
+			LOGE("Writing a encode_data to a file descriptor is failed. errno = %d", errno);
+			free(encode_data);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+
+		LOGE("result %d, encode_datalen %d", result, encode_datalen);
+		free(encode_data);
+		encode_data = NULL;
+		encode_datalen = 0;
+	}
+	return DATACONTROL_ERROR_NONE;
+}
+
 int __datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type type, void *data)
 {
 	bundle_raw *kb_data = NULL;
@@ -488,7 +543,6 @@ int __datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type ty
 	unsigned int nb = 0;
 
 	LOGI("send async ~~~");
-
 	bundle_encode_raw(kb, &kb_data, &datalen);
 	if (kb_data == NULL) {
 		LOGE("bundle encode error");
@@ -517,6 +571,9 @@ int __datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type ty
 		ret = __send_select_result(sockfd, kb, data);
 	else if (DATACONTROL_TYPE_MAP_GET == type)
 		ret = __send_get_value_result(sockfd, kb, data);
+	else if (DATACONTROL_TYPE_SQL_BULK_INSERT == type ||
+		DATACONTROL_TYPE_MAP_BULK_ADD == type)
+		ret = __send_bulk_result(sockfd, data);
 
 out:
 	free(buf);
@@ -525,7 +582,7 @@ out:
 	return ret;
 }
 
-static bundle *__get_data_sql(int fd)
+static bundle *__get_bundle_data_from_fd(int fd)
 {
 	bundle *b = bundle_create();
 	int len = 0;
@@ -539,6 +596,7 @@ static bundle *__get_data_sql(int fd)
 			bundle_free(b);
 		return NULL;
 	}
+	LOGE("read len @@@@@ : %d", len);
 
 	if (len > 0) {
 		buf = (char *)calloc(len, sizeof(char));
@@ -562,10 +620,40 @@ static bundle *__get_data_sql(int fd)
 		if (buf)
 			free(buf);
 	} else {
-		LOGE("__get_data_sql read count : %d", len);
+		LOGE("__get_bundle_data_from_fd read count : %d", len);
 	}
 
 	return b;
+}
+
+static data_control_bulk_data_h __get_bulk_data_from_fd(int fd)
+{
+	data_control_bulk_data_h ret_bulk_data_h = NULL;
+	int size = 0;
+	int ret;
+	int i;
+	bundle *data = NULL;
+
+	datacontrol_bulk_data_create(&ret_bulk_data_h);
+	ret = read(fd, &size, sizeof(int));
+	if (ret < sizeof(int)) {
+		LOGE("read error :%d", ret);
+		datacontrol_bulk_data_destroy(ret_bulk_data_h);
+		return NULL;
+	}
+	LOGI("bulk data size : %d", size);
+
+	for (i = 0; i < size; i++) {
+		LOGI("bulk data : %d", i);
+		data = __get_bundle_data_from_fd(fd);
+		if (data == NULL) {
+			LOGE("get bundle data from fd fail");
+			datacontrol_bulk_data_destroy(ret_bulk_data_h);
+			return NULL;
+		}
+		datacontrol_bulk_data_add(ret_bulk_data_h, data);
+	}
+	return ret_bulk_data_h;
 }
 
 static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data)
@@ -628,7 +716,13 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 
 		break;
 	}
-
+	case DATACONTROL_TYPE_SQL_BULK_INSERT:
+	{
+		list[PACKET_INDEX_REQUEST_RESULT] = "1";		/* request result */
+		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
+		bundle_add_str_array(res, OSP_K_ARG, list, 2);
+		break;
+	}
 	case DATACONTROL_TYPE_SQL_INSERT:
 	{
 		long long row_id = *(long long *)data;
@@ -652,6 +746,13 @@ static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data
 		list[PACKET_INDEX_REQUEST_RESULT] = "1";		/* request result */
 		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
 
+		bundle_add_str_array(res, OSP_K_ARG, list, 2);
+		break;
+	}
+	case DATACONTROL_TYPE_MAP_BULK_ADD:
+	{
+		list[PACKET_INDEX_REQUEST_RESULT] = "1";		/* request result */
+		list[PACKET_INDEX_ERROR_MSG] = DATACONTROL_EMPTY;
 		bundle_add_str_array(res, OSP_K_ARG, list, 2);
 		break;
 	}
@@ -722,9 +823,7 @@ static int __send_result(bundle *b, datacontrol_request_type type, void *data)
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 	ret = __datacontrol_send_async(socket_info->socket_fd, b, type, data);
-
 	LOGI("__datacontrol_send_async result : %d ", ret);
-
 	if (ret != DATACONTROL_ERROR_NONE)
 		g_hash_table_remove(__socket_pair_hash, caller_app_id);
 
@@ -1026,18 +1125,16 @@ int __provider_process(bundle *b, int fd)
 
 	/* Get the request type */
 	datacontrol_request_type type = atoi(request_type);
-	if (type >= DATACONTROL_TYPE_SQL_SELECT && type <= DATACONTROL_TYPE_SQL_DELETE)	{
+	if (type >= DATACONTROL_TYPE_SQL_SELECT && type <= DATACONTROL_TYPE_SQL_BULK_INSERT)	{
 		if (provider_sql_cb == NULL) {
 			LOGE("SQL callback is not registered.");
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
 		}
-
-	} else if (type >= DATACONTROL_TYPE_MAP_GET && type <= DATACONTROL_TYPE_MAP_REMOVE) {
+	} else if (type >= DATACONTROL_TYPE_MAP_GET && type <= DATACONTROL_TYPE_MAP_BULK_ADD) {
 		if (provider_map_cb == NULL) {
 			LOGE("Map callback is not registered.");
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
 		}
-
 	} else {
 		LOGE("Invalid request type");
 		return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -1120,9 +1217,9 @@ int __provider_process(bundle *b, int fd)
 	case DATACONTROL_TYPE_SQL_UPDATE:
 	{
 		LOGI("INSERT / UPDATE handler");
-		bundle *sql = __get_data_sql(fd);
+		bundle *sql = __get_bundle_data_from_fd(fd);
 		if (sql == NULL) {
-			LOGE("__get_data_sql fail");
+			LOGE("__get_bundle_data_from_fd fail");
 			goto err;
 		}
 		if (type == DATACONTROL_TYPE_SQL_INSERT) {
@@ -1135,6 +1232,21 @@ int __provider_process(bundle *b, int fd)
 			provider_sql_cb->update(provider_req_id, provider, sql, where, provider_sql_user_data);
 		}
 		bundle_free(sql);
+		break;
+	}
+	case DATACONTROL_TYPE_SQL_BULK_INSERT:
+	{
+		LOGI("BULK INSERT handler");
+		data_control_bulk_data_h data = __get_bulk_data_from_fd(fd);
+		if (data == NULL) {
+			LOGE("__get_bulk_data_from_fd fail");
+			goto err;
+		}
+
+		provider_sql_cb->bulk_insert(provider_req_id, provider, data, provider_sql_user_data);
+
+		LOGI("bulk_insert callback call done");
+		datacontrol_bulk_data_destroy(data);
 		break;
 	}
 	case DATACONTROL_TYPE_SQL_DELETE:
@@ -1172,6 +1284,20 @@ int __provider_process(bundle *b, int fd)
 		const char *map_value = arg_list[PACKET_INDEX_MAP_VALUE_1ST];
 		LOGI("Adds the %s-%s in Map datacontrol.", map_key, map_value);
 		provider_map_cb->add(provider_req_id, provider, map_key, map_value, provider_map_user_data);
+		break;
+	}
+	case DATACONTROL_TYPE_MAP_BULK_ADD:
+	{
+		LOGI("BULK ADD handler");
+		data_control_bulk_data_h data = __get_bulk_data_from_fd(fd);
+		if (data == NULL) {
+			LOGE("__get_bulk_data_from_fd fail");
+			goto err;
+		}
+
+		provider_map_cb->bulk_add(provider_req_id, provider, data, provider_map_user_data);
+		LOGI("bulk_add callback call done");
+		datacontrol_bulk_data_destroy(data);
 		break;
 	}
 	case DATACONTROL_TYPE_MAP_REMOVE:
@@ -1625,6 +1751,29 @@ int datacontrol_provider_get_client_appid(int request_id, char **appid)
 	return DATACONTROL_ERROR_NONE;
 }
 
+int datacontrol_provider_send_bulk_insert_result(int request_id, data_control_bulk_result_data_h bulk_result_data)
+{
+	int ret;
+	bundle *res;
+	bundle *b;
+
+	LOGI("Send an insert result for request id: %d", request_id);
+
+	if (__request_table == NULL)
+		__initialize_provider();
+
+	b = g_hash_table_lookup(__request_table, &request_id);
+	if (!b) {
+		LOGE("No data for the request id: %d", request_id);
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+	res = __set_result(b, DATACONTROL_TYPE_SQL_BULK_INSERT, NULL);
+	ret = __send_result(res, DATACONTROL_TYPE_SQL_BULK_INSERT, (void *)bulk_result_data);
+	g_hash_table_remove(__request_table, &request_id);
+
+	return ret;
+}
+
 int datacontrol_provider_send_select_result(int request_id, void *db_handle)
 {
 	int ret;
@@ -1744,6 +1893,30 @@ int datacontrol_provider_send_error(int request_id, const char *error)
 	res = __set_result(b, DATACONTROL_TYPE_ERROR, (void *)error);
 
 	return __send_result(res, DATACONTROL_TYPE_ERROR, NULL);
+}
+
+
+int datacontrol_provider_send_map_bulk_add_result(int request_id, data_control_bulk_result_data_h bulk_result_data)
+{
+	int ret;
+	bundle *res;
+	bundle *b;
+
+	LOGI("Send bulk add result for request id: %d", request_id);
+
+	if (__request_table == NULL)
+		__initialize_provider();
+
+	b = g_hash_table_lookup(__request_table, &request_id);
+	if (!b) {
+		LOGE("No data for the request id: %d", request_id);
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+	res = __set_result(b, DATACONTROL_TYPE_MAP_BULK_ADD, NULL);
+	ret = __send_result(res, DATACONTROL_TYPE_MAP_BULK_ADD, (void *)bulk_result_data);
+	g_hash_table_remove(__request_table, &request_id);
+
+	return ret;
 }
 
 int datacontrol_provider_send_map_result(int request_id)
