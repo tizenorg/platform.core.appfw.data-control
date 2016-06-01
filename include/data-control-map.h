@@ -23,10 +23,26 @@
 #define _APPFW_DATA_CONTROL_MAP_H_
 
 #include <data-control-types.h>
+#include <data_control_types.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief		Called when the response is received from the key-value structured data control provider.
+ *
+ * @param [in]	request_id	The request ID that identifies the data control
+ * @param [in]	provider		The provider handle
+ * @param [in]	provider_result	Set to true if the data control provider successfully processed. @n
+ *								false otherwise.
+ * @param [in]	error		The error message from the data control provider
+ * @param [in]	user_data	The user data passed from the register function
+ */
+typedef void (*datacontrol_map_bulk_add_response_cb)(int request_id, datacontrol_h provider,
+		data_control_bulk_result_data_h bulk_results,
+		bool provider_result, const char *error, void *user_data);
+
 
 
 /**
@@ -90,12 +106,14 @@ typedef void (*datacontrol_map_remove_response_cb)(int request_id, datacontrol_h
  * @see		datacontrol_map_set_response_cb()
  * @see		datacontrol_map_add_response_cb()
  * @see		datacontrol_map_remove_response_cb()
+ * @see		datacontrol_map_bulk_add_response_cb()
  */
 typedef struct {
 	datacontrol_map_get_response_cb get;
 	datacontrol_map_set_response_cb set;
 	datacontrol_map_add_response_cb add;
 	datacontrol_map_remove_response_cb remove;
+	datacontrol_map_bulk_add_response_cb bulk_add;
 } datacontrol_map_response_cb;
 
 /**
@@ -484,6 +502,7 @@ EXPORT_API int datacontrol_map_add(datacontrol_h provider, const char *key, cons
  * @endcode
  */
 EXPORT_API int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *value, int *request_id);
+EXPORT_API int datacontrol_map_bulk_add(datacontrol_h provider, data_control_bulk_data_h bulk_data_h, int *request_id);
 
 #ifdef __cplusplus
 }

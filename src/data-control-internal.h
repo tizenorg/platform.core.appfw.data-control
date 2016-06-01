@@ -89,6 +89,10 @@ struct datacontrol_s {
 	char *data_id;
 };
 
+void _bundle_foreach_check_arg_size_cb(const char *key, const int type,
+		const bundle_keyval_t *kv, void *arg_size);
+int _datacontrol_send_async(int sockfd, bundle *kb, void *extra_data, datacontrol_request_type type, void *data);
+int _recv_bulk_process(int fd, data_control_bulk_result_data_h *result_data_h);
 int _consumer_request_compare_cb(gconstpointer a, gconstpointer b);
 int _datacontrol_sql_set_cursor(const char *path);
 char *_datacontrol_create_select_statement(char *data_id,
@@ -99,7 +103,6 @@ int _datacontrol_create_request_id(void);
 int _datacontrol_get_data_changed_callback_id(void);
 int _datacontrol_get_data_changed_filter_callback_id(void);
 
-int _datacontrol_send_async(int sockfd, bundle *kb, datacontrol_request_type type, void *data);
 int _read_socket(int fd, char *buffer, unsigned int nbytes, unsigned int *bytes_read);
 int _write_socket(int fd, void *buffer, unsigned int nbytes, unsigned int *bytes_write);
 

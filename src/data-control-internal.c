@@ -40,6 +40,7 @@
 #include "data-control-sql-cursor.h"
 #include "data-control-internal.h"
 #include "data-control-types.h"
+#include "data-control-bulk.h"
 
 #define MAX_COLUMN_SIZE				512
 #define MAX_STATEMENT_SIZE			1024
@@ -57,6 +58,166 @@
 #define DATA_CONTROL_DB_NAME "DATA_CONTROL_DATA_CHANGE_TABLE"
 
 static GDBusConnection *_gdbus_conn = NULL;
+
+void _bundle_foreach_check_arg_size_cb(const char *key, const int type,
+		const bundle_keyval_t *kv, void *arg_size)
+{
+	char *value = NULL;
+	size_t value_len = 0;
+	bundle_keyval_get_basic_val((bundle_keyval_t *)kv, (void **)&value, &value_len);
+
+	arg_size += (strlen(key) + value_len) * sizeof(wchar_t);
+	return;
+}
+
+int _datacontrol_send_async(int sockfd, bundle *kb, void *extra_data, datacontrol_request_type type, void *data)
+{
+	bundle_raw *kb_data = NULL;
+	bundle_raw *extra_kb_data = NULL;
+	int ret = DATACONTROL_ERROR_NONE;
+	int datalen = 0;
+	int extra_kb_datalen = 0;
+	char *buf = NULL;
+	int total_len = 0;
+	unsigned int nb = 0;
+	int i;
+	int size;
+	bundle *bulk_data;
+	data_control_bulk_data_h bulk_data_h = NULL;
+	bundle_raw *encode_data = NULL;
+	int encode_datalen;
+
+	LOGE("send async ~~~");
+
+	bundle_encode_raw(kb, &kb_data, &datalen);
+	if (kb_data == NULL) {
+		LOGE("bundle encode error");
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	if (DATACONTROL_TYPE_SQL_INSERT == type ||
+			DATACONTROL_TYPE_SQL_UPDATE == type) {
+		bundle_encode_raw((bundle *)extra_data, &extra_kb_data, &extra_kb_datalen);
+		if (extra_kb_data == NULL) {
+			LOGE("bundle encode error");
+			goto out;
+		}
+	}
+
+	total_len =  sizeof(datalen) + datalen;
+	if (extra_kb_datalen > 0)
+		total_len += sizeof(extra_kb_datalen) + extra_kb_datalen;
+
+	/* encoded bundle + encoded bundle size */
+	buf = (char *)calloc(total_len, sizeof(char));
+	if (buf == NULL) {
+		bundle_free_encoded_rawdata(&kb_data);
+		LOGE("Out of memory.");
+		goto out;
+	}
+
+	memcpy(buf, &datalen, sizeof(datalen));
+	memcpy(buf + sizeof(datalen), kb_data, datalen);
+	if (extra_kb_datalen > 0) {
+		memcpy(buf + sizeof(datalen) + datalen, &extra_kb_datalen, sizeof(extra_kb_datalen));
+		memcpy(buf + sizeof(datalen) + datalen + sizeof(extra_kb_datalen), extra_kb_data, extra_kb_datalen);
+	}
+
+	LOGI("write : %d", total_len);
+	if (_write_socket(sockfd, buf, total_len, &nb) != DATACONTROL_ERROR_NONE) {
+		LOGI("write data fail");
+		ret = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
+	if (DATACONTROL_TYPE_SQL_BULK_INSERT == type ||
+		DATACONTROL_TYPE_MAP_BULK_ADD == type) {
+		bulk_data_h = (data_control_bulk_data_h)extra_data;
+		size = datacontrol_bulk_data_get_size(bulk_data_h);
+
+		if (_write_socket(sockfd, &size, sizeof(size), &nb) != DATACONTROL_ERROR_NONE) {
+			LOGI("write bulk size fail");
+			ret = DATACONTROL_ERROR_IO_ERROR;
+			goto out;
+		}
+		LOGI("write bulk size %d @@@@@", size);
+		for (i = 0; i < size; i++) {
+			bulk_data = datacontrol_bulk_data_get_data(bulk_data_h, i);
+			bundle_encode_raw(bulk_data, &encode_data, &encode_datalen);
+			if (_write_socket(sockfd, &encode_datalen, sizeof(encode_datalen), &nb) != DATACONTROL_ERROR_NONE) {
+				LOGI("write bulk encode_datalen fail");
+				ret = DATACONTROL_ERROR_IO_ERROR;
+				goto out;
+			}
+			LOGI("write encode_datalen %d @@@@@", encode_datalen);
+
+			if (_write_socket(sockfd, encode_data, encode_datalen, &nb) != DATACONTROL_ERROR_NONE) {
+				LOGI("write bulk encode_data fail");
+				ret = DATACONTROL_ERROR_IO_ERROR;
+				goto out;
+			}
+		}
+	}
+
+out:
+	if (buf)
+		free(buf);
+	bundle_free_encoded_rawdata(&kb_data);
+	bundle_free_encoded_rawdata(&extra_kb_data);
+	bundle_free_encoded_rawdata(&encode_data);
+
+	return ret;
+}
+
+int _recv_bulk_process(int fd, data_control_bulk_result_data_h *result_data_h)
+{
+	int bulk_results_size;
+	guint nb;
+	int retval = DATACONTROL_ERROR_NONE;
+	int i;
+	int bulk_result = 0;
+	char *encode_data = NULL;
+	int encode_datalen = 0;
+	bundle *result_data = NULL;
+
+	datacontrol_bulk_result_data_create(result_data_h);
+	if (_read_socket(fd, (char *)&bulk_results_size, sizeof(bulk_results_size), &nb) != DATACONTROL_ERROR_NONE) {
+		retval = DATACONTROL_ERROR_IO_ERROR;
+		LOGE("read socket fail: bulk_results_size");
+		goto out;
+	}
+
+	LOGI("##### bulk result size : %d", bulk_results_size);
+	for (i = 0; i < bulk_results_size; i++) {
+		if (_read_socket(fd, (char *)&bulk_result, sizeof(bulk_result), &nb) != DATACONTROL_ERROR_NONE) {
+			retval = DATACONTROL_ERROR_IO_ERROR;
+			LOGE("read socket fail: bulk_result");
+			goto out;
+		}
+		LOGI("##### bulk result : %d", bulk_result);
+		if (_read_socket(fd, (char *)&encode_datalen, sizeof(encode_datalen), &nb) != DATACONTROL_ERROR_NONE) {
+			retval = DATACONTROL_ERROR_IO_ERROR;
+			LOGE("read socket fail: encode_datalen");
+			goto out;
+		}
+		LOGI("##### encode_datalen : %d", encode_datalen);
+		encode_data = (char *)calloc(encode_datalen, sizeof(char));
+		if (_read_socket(fd, encode_data, encode_datalen, &nb) != DATACONTROL_ERROR_NONE) {
+			retval = DATACONTROL_ERROR_IO_ERROR;
+			LOGE("read socket fail: encode_data");
+			goto out;
+		}
+		result_data = bundle_decode_raw((bundle_raw *)encode_data, encode_datalen);
+		datacontrol_bulk_result_data_add(*result_data_h, result_data, bulk_result);
+		if (encode_data) {
+			free(encode_data);
+			encode_data = NULL;
+		}
+	}
+
+out:
+	return retval;
+}
 
 datacontrol_data_change_type_e _get_internal_noti_type(data_control_data_change_type_e type)
 {
