@@ -33,6 +33,21 @@ extern "C" {
  * @{
  */
 
+ /**
+ * @brief  Called when the response is received from the key-value structured data control provider.
+ * @since_tizen 2.3
+ *
+ * @param[in]  request_id       The request ID that identifies the data control
+ * @param[in]  provider         The provider handle
+ * @param[in]  provider_result  Set to @c true if the data control provider successfully processed, \n
+ *                              otherwise set to @c false
+ * @param[in]  error            The error message from the data control provider
+ * @param[in]  user_data        The user data passed from the register function
+ */
+typedef void (*data_control_map_bulk_add_response_cb)(int request_id,
+		data_control_h provider, data_control_bulk_result_data_h bulk_results, bool provider_result,
+		const char *error, void *user_data);
+
 /**
  * @brief  Called when the result value list is received from the key-value structured data control provider.
  * @since_tizen 2.3
@@ -122,6 +137,7 @@ typedef struct {
 	data_control_map_set_response_cb set_cb; /**< This callback function is called when the response is received for a setting value from the key-value structured data control provider. */
 	data_control_map_add_response_cb add_cb; /**< This callback function is called when the response is received for a adding value from the key-value structured data control provider. */
 	data_control_map_remove_response_cb remove_cb; /**< This callback function is called when the response is for a removing value received from the key-value structured data control provider. */
+	data_control_map_bulk_add_response_cb bulk_add_cb; /**< This callback function is called when the response is for a removing value received from the key-value structured data control provider. */
 } data_control_map_response_cb;
 
 /**
@@ -609,6 +625,8 @@ int data_control_map_add(data_control_h provider, const char *key, const char *v
  * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
  */
 int data_control_map_remove(data_control_h provider, const char *key, const char *value, int *request_id);
+
+int data_control_map_bulk_add(data_control_h provider, data_control_bulk_data_h bulk_data_h, int *request_id);
 
 /**
 * @}

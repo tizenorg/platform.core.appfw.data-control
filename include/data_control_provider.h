@@ -87,6 +87,19 @@ typedef bool (*data_control_provider_data_change_consumer_filter_cb)(
  *
  * @param[in]  request_id   The request ID
  * @param[in]  provider     The provider handle
+ * @param[in]  bulk_results  The column-value pairs to insert \n
+ *                          If the value is a string, the value must be wrapped in single quotes, else it does not need to be wrapped in single quotes.
+ * @param[in]  user_data    The user data passed from the register function
+ */
+typedef void (*data_control_provider_sql_bulk_insert_request_cb)(int request_id,
+		data_control_h provider, data_control_bulk_data_h bulk_data, void *user_data);
+
+/**
+ * @brief  Called when the insert request is received from an application using SQL-friendly interface based data control.
+ * @since_tizen 2.3
+ *
+ * @param[in]  request_id   The request ID
+ * @param[in]  provider     The provider handle
  * @param[in]  insert_data  The column-value pairs to insert \n
  *                          If the value is a string, the value must be wrapped in single quotes, else it does not need to be wrapped in single quotes.
  * @param[in]  user_data    The user data passed from the register function
@@ -169,6 +182,20 @@ typedef void (*data_control_provider_map_set_value_request_cb)(int request_id,
 		data_control_h provider, const char *key,
 		const char *old_value, const char *new_value, void *user_data);
 
+
+/**
+ * @brief  Called when the request for adding the value is received from the key-value structured data control consumer.
+ * @since_tizen 2.3
+ *
+ * @param[in]  request_id  The request ID
+ * @param[in]  provider    The provider handle
+ * @param[in]  key         The key of the value to add
+ * @param[in]  value       The value to add
+ * @param[in]  user_data   The user data passed from the register function
+ */
+typedef void (*data_control_provider_map_bulk_add_value_request_cb)(int request_id,
+		data_control_h provider, data_control_bulk_data_h bulk_data, void *user_data);
+
 /**
  * @brief  Called when the request for adding the value is received from the key-value structured data control consumer.
  * @since_tizen 2.3
@@ -206,12 +233,14 @@ typedef void (*data_control_provider_map_remove_value_request_cb)(
  * @see  data_control_provider_sql_insert_request_cb()
  * @see  data_control_provider_sql_update_request_cb()
  * @see  data_control_provider_sql_delete_request_cb()
+ * @see  data_control_provider_sql_bulk_insert_request_cb()
  */
 typedef struct {
 	data_control_provider_sql_insert_request_cb insert_cb; /**< This callback function is called when a request for insert operation is received from other application. */
 	data_control_provider_sql_select_request_cb select_cb; /**< This callback function is called when a request for select operation is received from other application. */
 	data_control_provider_sql_update_request_cb update_cb; /**< This callback function is called when a request for update operation is received from other application. */
 	data_control_provider_sql_delete_request_cb delete_cb; /**< This callback function is called when a request for delete operation is received from other application. */
+	data_control_provider_sql_bulk_insert_request_cb bulk_insert_cb; /**< This callback function is called when a request for bulk insert operation is received from other application. */
 } data_control_provider_sql_cb;
 
 /**
@@ -223,12 +252,14 @@ typedef struct {
  * @see  data_control_provider_map_set_value_request_cb()
  * @see  data_control_provider_map_add_value_request_cb()
  * @see  data_control_provider_map_remove_value_request_cb()
+ * @see  data_control_provider_map_bulk_add_value_request_cb()
  */
 typedef struct {
 	data_control_provider_map_get_value_request_cb get_cb; /**< This callback function is called when a request for getting value is received from other application. */
 	data_control_provider_map_set_value_request_cb set_cb; /**< This callback function is called when a request for setting value is received from other application. */
 	data_control_provider_map_add_value_request_cb add_cb; /**< This callback function is called when a request for adding value is received from other application. */
 	data_control_provider_map_remove_value_request_cb remove_cb; /**< This callback function is called when a request for removing value is received from other application. */
+	data_control_provider_map_bulk_add_value_request_cb bulk_add_cb; /**< This callback function is called when a request for removing value is received from other application. */
 } data_control_provider_map_cb;
 
 /**
@@ -599,6 +630,10 @@ int data_control_provider_foreach_data_change_consumer(
 		data_control_h provider,
 		data_control_provider_data_change_consumer_cb list_cb,
 		void *user_data);
+
+
+int data_control_provider_send_bulk_insert_result(int request_id, data_control_bulk_result_data_h bulk_results);
+int data_control_provider_send_map_bulk_add_result(int request_id, data_control_bulk_result_data_h bulk_results);
 
 /**
 * @}

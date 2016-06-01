@@ -42,6 +42,22 @@ extern "C" {
  *
  * @param[in]  request_id       The request ID
  * @param[in]  provider         The provider handle
+ * @param[in]  bulk_results  The inserted row ID set by the data control
+ * @param[in]  provider_result  Set to @c true if the data control provider successfully processed, \n
+ *                              otherwise set to @c false
+ * @param[in]  error            The error message from the data control provider
+ * @param[in]  user_data        The user data passed from the register function
+ */
+typedef void (*data_control_sql_bulk_insert_response_cb)(int request_id,
+		data_control_h provider, data_control_bulk_result_data_h bulk_results,
+		bool provider_result, const char *error, void *user_data);
+
+/**
+ * @brief  Called when a response is received for an insert operation from an application using the SQL-friendly interface based data control.
+ * @since_tizen 2.3
+ *
+ * @param[in]  request_id       The request ID
+ * @param[in]  provider         The provider handle
  * @param[in]  inserted_row_id  The inserted row ID set by the data control
  * @param[in]  provider_result  Set to @c true if the data control provider successfully processed, \n
  *                              otherwise set to @c false
@@ -108,12 +124,14 @@ typedef void (*data_control_sql_update_response_cb)(int request_id,
  * @see  data_control_sql_insert_response_cb()
  * @see  data_control_sql_update_response_cb()
  * @see  data_control_sql_delete_response_cb()
+ * @see  data_control_sql_bulk_insert_response_cb()
  */
 typedef struct {
 	data_control_sql_select_response_cb select_cb; /**< This callback function is called when a response is received for an select operation from an application using the SQL-friendly interface based data control. */
 	data_control_sql_insert_response_cb insert_cb; /**< This callback function is called when a response is received for an insert operation from an application using the SQL-friendly interface based data control. */
 	data_control_sql_update_response_cb update_cb; /**< This callback function is called when a response is received for an update operation from an application using the SQL-friendly interface based data control. */
 	data_control_sql_delete_response_cb delete_cb; /**< This callback function is called when a response is received for a delete operation from an application using the SQL-friendly interface based data control. */
+	data_control_sql_bulk_insert_response_cb bulk_insert_cb; /**< This callback function is called when a response is received for a delete operation from an application using the SQL-friendly interface based data control. */
 } data_control_sql_response_cb;
 
 /**
@@ -616,6 +634,8 @@ int data_control_sql_select_with_page(data_control_h provider, char **column_lis
  * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
  */
 int data_control_sql_update(data_control_h provider, const bundle *update_data, const char *where, int *request_id);
+
+int data_control_sql_bulk_insert(data_control_h provider, data_control_bulk_data_h bulk_data_h, int *request_id);
 
 /**
 * @}
