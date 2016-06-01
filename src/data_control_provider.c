@@ -60,6 +60,16 @@ static void __sql_insert_request_cb(int request_id, datacontrol_h provider, bund
 		sql_provider_callback.insert_cb(request_id, (data_control_h)provider, insert_data, user_data);
 }
 
+
+static void __sql_bulk_insert_request_cb(int request_id, datacontrol_h provider, data_control_bulk_data_h bulk_data, void *user_data)
+{
+	_LOGI("sql_bulk_insert_request");
+
+	if (sql_provider_callback.bulk_insert_cb)
+		sql_provider_callback.bulk_insert_cb(request_id, (data_control_h)provider, bulk_data, user_data);
+}
+
+
 static void __sql_update_request_cb(int request_id, datacontrol_h provider, bundle *update_data, const char *where, void *user_data)
 {
 	_LOGI("sql_update_request");
@@ -131,6 +141,7 @@ EXPORT_API int data_control_provider_sql_register_cb(data_control_provider_sql_c
 	sql_internal_callback.update = __sql_update_request_cb;
 	sql_internal_callback.delete = __sql_delete_request_cb;
 	sql_internal_callback.select = __sql_select_request_cb;
+	sql_internal_callback.bulk_insert = __sql_bulk_insert_request_cb;
 
 	return datacontrol_provider_sql_register_cb(&sql_internal_callback, user_data);
 }
@@ -171,6 +182,11 @@ EXPORT_API int data_control_provider_map_unregister_cb(void)
 EXPORT_API int data_control_provider_get_client_appid(int request_id, char **appid)
 {
 	return datacontrol_provider_get_client_appid(request_id, appid);
+}
+
+EXPORT_API int data_control_provider_send_bulk_insert_result(int request_id, data_control_bulk_result_data_h bulk_results)
+{
+	return datacontrol_provider_send_bulk_insert_result(request_id, bulk_results);
 }
 
 EXPORT_API int data_control_provider_send_select_result(int request_id, void *db_handle)

@@ -36,6 +36,18 @@ extern "C" {
  *
  * @param [in]	request_id	The request ID
  * @param [in]	provider	The provider handle
+ * @param [in]	bulk_results	The column-value pairs to insert @n
+ *				If the value is a string, the value must be wrapped in single quotes, else it does not need to be wrapped in single quotes.
+ * @param [in]  user_data	The user data passed from the register function
+ */
+typedef void (*datacontrol_provider_sql_bulk_insert_request_cb)(int request_id, datacontrol_h provider,
+		data_control_bulk_data_h bulk_data, void *user_data);
+
+/**
+ * @brief	Called when the insert request is received from an application using SQL-friendly interface based data control.
+ *
+ * @param [in]	request_id	The request ID
+ * @param [in]	provider	The provider handle
  * @param [in]	insert_data	The column-value pairs to insert @n
  *				If the value is a string, the value must be wrapped in single quotes, else it does not need to be wrapped in single quotes.
  * @param [in]  user_data	The user data passed from the register function
@@ -145,6 +157,7 @@ typedef struct {
 	datacontrol_provider_sql_select_request_cb select;
 	datacontrol_provider_sql_update_request_cb update;
 	datacontrol_provider_sql_delete_request_cb delete;
+	datacontrol_provider_sql_bulk_insert_request_cb bulk_insert;
 } datacontrol_provider_sql_cb;
 
 /**
@@ -343,6 +356,10 @@ EXPORT_API int datacontrol_provider_foreach_data_change_consumer(
 		datacontrol_h provider,
 		void *list_cb,
 		void *user_data);
+
+EXPORT_API int datacontrol_provider_send_bulk_insert_result(
+		int request_id,
+		data_control_bulk_result_data_h bulk_results);
 
 #ifdef __cplusplus
 }
