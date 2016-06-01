@@ -23,12 +23,27 @@
 #define _APPFW_DATA_CONTROL_SQL_H_
 
 #include <data-control-types.h>
+#include <data_control_types.h>
 #include <data-control-sql-cursor.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+
+/**
+ * @brief		Called when response is received for insert operation from an application using the SQL-friendly interface based data control.
+ *
+ * @param [in]	request_id	The request ID
+ * @param [in]	provider		The provider handle
+ * @param [in]	bulk_results	The inserted row ID set by the data control
+ * @param [in]	provider_result	Set to true if the data control provider successfully processed. @n
+ *								false otherwise.
+ * @param [in]	error		The error message from the data control provider
+ * @param [in]	user_data	The user data passed from the register function
+ */
+typedef void (*datacontrol_sql_bulk_insert_response_cb)(int request_id, datacontrol_h provider,
+		data_control_bulk_result_data_h bulk_results, bool provider_result, const char *error, void *user_data);
 
 /**
  * @brief		Called when response is received for insert operation from an application using the SQL-friendly interface based data control.
@@ -90,12 +105,14 @@ typedef void (*datacontrol_sql_update_response_cb)(int request_id, datacontrol_h
  * @see		datacontrol_sql_insert_response_cb()
  * @see		datacontrol_sql_update_response_cb()
  * @see		datacontrol_sql_delete_response_cb()
+ * @see		datacontrol_sql_bulk_insert_response_cb()
  */
 typedef struct {
 	datacontrol_sql_select_response_cb select;
 	datacontrol_sql_insert_response_cb insert;
 	datacontrol_sql_update_response_cb update;
 	datacontrol_sql_delete_response_cb delete;
+	datacontrol_sql_bulk_insert_response_cb bulk_insert;
 } datacontrol_sql_response_cb;
 
 /**
@@ -501,6 +518,7 @@ EXPORT_API int datacontrol_sql_select_with_page(datacontrol_h provider, char **c
  * @endcode
  */
 EXPORT_API int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, const char *where, int *request_id);
+EXPORT_API int datacontrol_sql_bulk_insert(datacontrol_h provider, data_control_bulk_data_h bulk_data_h, int *request_id);
 
 #ifdef __cplusplus
 }

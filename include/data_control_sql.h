@@ -37,6 +37,24 @@ extern "C" {
  */
 
 /**
+ * @brief  Called when a response is received for an bulk insert operation from an application using the SQL-friendly interface based data control.
+ * @since_tizen 2.3
+ *
+ * @param[in]  request_id       The request ID
+ * @param[in]  provider         The provider handle
+ * @param[in]  bulk_results  	The result data for each insert request
+ * @param[in]  provider_result  Set to @c true if the data control provider successfully processed, \n
+ *                              otherwise set to @c false
+ * @param[in]  error            The error message from the data control provider
+ * @param[in]  user_data        The user data passed from the register function
+ *
+ * @see  data_control_sql_get_provider_id()
+ */
+typedef void (*data_control_sql_bulk_insert_response_cb)(int request_id,
+		data_control_h provider, data_control_bulk_result_data_h bulk_results,
+		bool provider_result, const char *error, void *user_data);
+
+/**
  * @brief  Called when a response is received for an insert operation from an application using the SQL-friendly interface based data control.
  * @since_tizen 2.3
  *
@@ -108,12 +126,14 @@ typedef void (*data_control_sql_update_response_cb)(int request_id,
  * @see  data_control_sql_insert_response_cb()
  * @see  data_control_sql_update_response_cb()
  * @see  data_control_sql_delete_response_cb()
+ * @see  data_control_sql_bulk_insert_response_cb()
  */
 typedef struct {
 	data_control_sql_select_response_cb select_cb; /**< This callback function is called when a response is received for an select operation from an application using the SQL-friendly interface based data control. */
 	data_control_sql_insert_response_cb insert_cb; /**< This callback function is called when a response is received for an insert operation from an application using the SQL-friendly interface based data control. */
 	data_control_sql_update_response_cb update_cb; /**< This callback function is called when a response is received for an update operation from an application using the SQL-friendly interface based data control. */
 	data_control_sql_delete_response_cb delete_cb; /**< This callback function is called when a response is received for a delete operation from an application using the SQL-friendly interface based data control. */
+	data_control_sql_bulk_insert_response_cb bulk_insert_cb; /**< This callback function is called when a response is received for a bulk insert operation from an application using the SQL-friendly interface based data control. */
 } data_control_sql_response_cb;
 
 /**
@@ -616,6 +636,89 @@ int data_control_sql_select_with_page(data_control_h provider, char **column_lis
  * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
  */
 int data_control_sql_update(data_control_h provider, const bundle *update_data, const char *where, int *request_id);
+
+/**
+ * @brief  Inserts multiple rows in one request.
+ * @since_tizen 3.0
+ * @privlevel   public
+ * @privilege   %http://tizen.org/privilege/datasharing \n
+ *              %http://tizen.org/privilege/appmanager.launch
+ *
+ * @remarks If you want to use this api, you must add privileges.
+ * @remarks The following example demonstrates how to use the %data_control_sql_bulk_insert() method:
+ *
+ * @code
+ *
+ *	void sql_bulk_insert_response_cb(int request_id, data_control_h provider, data_control_bulk_result_data_h bulk_results,
+ *		bool provider_result, const char *error, void *user_data) {
+ *		if (provider_result) {
+ *			LOGI("The bulk insert operation is successful");
+ *		}
+ *		else {
+ *			LOGI("The bulk insert operation for the request %d is failed. error message: %s", request_id, error);
+ *		}
+ *	}
+ *
+ *	data_control_sql_response_cb sql_callback;
+ *
+ *	int main()
+ *	{
+ *
+ *		int req_id;
+ *		data_control_bulk_data_h bulk_data_h;
+ *		bundle *b1;
+ *		bundle *b2;
+ *		int result = 0;
+ *		int req_id = 0;
+ *		int bulk_count = 0;
+ *
+ *		sql_callback.bulk_insert_cb = sql_bulk_insert_response_cb;
+ *		result = data_control_sql_register_response_cb(provider, &sql_callback, void *user_data);
+ *		if (result != DATA_CONTROL_ERROR_NONE) {
+ *			LOGE("Registering the callback function is failed with error: %d", result);
+ *			return result;
+ *		}
+ *
+ *		b1 = bundle_create();
+ *		bundle_add_str(b1, "WORD", "'test'");
+ *		bundle_add_str(b1, "WORD_DESC", "'test description'");
+ *		b2 = bundle_create();
+ *		bundle_add_str(b2, "WORD", "'test'");
+ *		bundle_add_str(b2, "WORD_DESC", "'test description'");
+ *
+ *		data_control_bulk_data_create(&bulk_data_h);
+ *		data_control_bulk_data_add(bulk_data_h, b1);
+ *		data_control_bulk_data_add(bulk_data_h, b2);
+ *		data_control_bulk_data_get_count(bulk_data_h, &bulk_count);
+ *
+ *		dlog_print(DLOG_INFO, LOG_TAG, "bulk insert count %d ", bulk_count);
+ *
+ *		data_control_sql_bulk_insert(provider, bulk_data_h, &req_id);
+ *		data_control_bulk_data_destroy(bulk_data_h);
+ *
+ *		bundle_free(b1);
+ *		bundle_free(b2);
+ *      return result;
+ *  }
+ *
+ * @endcode
+
+ * @param[in]   provider     The provider handle
+ * @param[in]   insert_data  The column-value pairs to insert\ n
+ *                           If the value is a string, then the value must be wrapped in single quotes,
+ *                           else it does not need to be wrapped in single quotes.
+ * @param[out]  request_id   The request ID
+ *
+ * @return  @c 0 on success,
+ *          otherwise a negative error value
+ *
+ * @retval #DATA_CONTROL_ERROR_NONE              Successful
+ * @retval #DATA_CONTROL_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #DATA_CONTROL_ERROR_IO_ERROR          I/O error
+ * @retval #DATA_CONTROL_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #DATA_CONTROL_ERROR_PERMISSION_DENIED Permission denied
+ */
+int data_control_sql_bulk_insert(data_control_h provider, data_control_bulk_data_h bulk_data_h, int *request_id);
 
 /**
 * @}
