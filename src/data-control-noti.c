@@ -34,8 +34,10 @@
 #include <bundle_internal.h>
 #include <pkgmgr-info.h>
 
+#include "data_control_log.h"
 #include "data-control-noti.h"
 #include "data-control-internal.h"
+
 
 typedef struct {
 	GList *cb_list;

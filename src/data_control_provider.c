@@ -60,6 +60,16 @@ static void __sql_insert_request_cb(int request_id, datacontrol_h provider, bund
 		sql_provider_callback.insert_cb(request_id, (data_control_h)provider, insert_data, user_data);
 }
 
+
+static void __sql_bulk_insert_request_cb(int request_id, datacontrol_h provider, data_control_bulk_data_h bulk_data, void *user_data)
+{
+	_LOGI("sql_bulk_insert_request");
+
+	if (sql_provider_callback.bulk_insert_cb)
+		sql_provider_callback.bulk_insert_cb(request_id, (data_control_h)provider, bulk_data, user_data);
+}
+
+
 static void __sql_update_request_cb(int request_id, datacontrol_h provider, bundle *update_data, const char *where, void *user_data)
 {
 	_LOGI("sql_update_request");
@@ -116,6 +126,14 @@ static void __map_remove_request_cb(int request_id, datacontrol_h provider, cons
 		map_provider_callback.remove_cb(request_id, (data_control_h)provider, key, value, user_data);
 }
 
+static void __map_bulk_add_request_cb(int request_id, datacontrol_h provider, data_control_bulk_data_h bulk_data, void *user_data)
+{
+	_LOGI("map_bulk_add_request");
+
+	if (map_provider_callback.bulk_add_cb)
+		map_provider_callback.bulk_add_cb(request_id, (data_control_h)provider, bulk_data, user_data);
+}
+
 EXPORT_API int data_control_provider_sql_register_cb(data_control_provider_sql_cb *callback, void *user_data)
 {
 	int retval = datacontrol_check_privilege(PRIVILEGE_PROVIDER);
@@ -131,6 +149,7 @@ EXPORT_API int data_control_provider_sql_register_cb(data_control_provider_sql_c
 	sql_internal_callback.update = __sql_update_request_cb;
 	sql_internal_callback.delete = __sql_delete_request_cb;
 	sql_internal_callback.select = __sql_select_request_cb;
+	sql_internal_callback.bulk_insert = __sql_bulk_insert_request_cb;
 
 	return datacontrol_provider_sql_register_cb(&sql_internal_callback, user_data);
 }
@@ -157,6 +176,7 @@ EXPORT_API int data_control_provider_map_register_cb(data_control_provider_map_c
 	map_internal_callback.set = __map_set_request_cb;
 	map_internal_callback.add = __map_add_request_cb;
 	map_internal_callback.remove = __map_remove_request_cb;
+	map_internal_callback.bulk_add = __map_bulk_add_request_cb;
 
 	return datacontrol_provider_map_register_cb(&map_internal_callback, user_data);
 }
@@ -171,6 +191,11 @@ EXPORT_API int data_control_provider_map_unregister_cb(void)
 EXPORT_API int data_control_provider_get_client_appid(int request_id, char **appid)
 {
 	return datacontrol_provider_get_client_appid(request_id, appid);
+}
+
+EXPORT_API int data_control_provider_send_bulk_insert_result(int request_id, data_control_bulk_result_data_h bulk_results)
+{
+	return datacontrol_provider_send_bulk_insert_result(request_id, bulk_results);
 }
 
 EXPORT_API int data_control_provider_send_select_result(int request_id, void *db_handle)
@@ -554,6 +579,11 @@ EXPORT_API bool data_control_provider_match_data_id(data_control_h provider, con
 		free(data);
 		return false;
 	}
+}
+
+EXPORT_API int data_control_provider_send_map_bulk_add_result(int request_id, data_control_bulk_result_data_h bulk_results)
+{
+	return datacontrol_provider_send_map_bulk_add_result(request_id, bulk_results);
 }
 
 EXPORT_API int data_control_provider_send_map_result(int request_id)
