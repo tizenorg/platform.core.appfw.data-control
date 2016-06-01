@@ -21,6 +21,7 @@
 #include <data_control_sql.h>
 #include <data_control_map.h>
 #include <data_control_provider.h>
+#include <data_control_bulk.h>
 
 /**
  * @file   data_control.h

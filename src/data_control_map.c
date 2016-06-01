@@ -78,6 +78,16 @@ static void __map_remove_response(int request_id, datacontrol_h provider, bool p
 		callback->remove_cb(request_id, (data_control_h)provider, provider_result, error, user_data);
 }
 
+static void __map_bulk_add_response(int request_id, datacontrol_h provider,  data_control_bulk_result_data_h bulk_results, 
+	bool provider_result, const char *error, void *user_data)
+{
+	_LOGI("map_bulk_add_response");
+
+	data_control_map_response_cb *callback = (data_control_map_response_cb *)g_hash_table_lookup(response_table, provider->provider_id);
+	if (callback)
+		callback->bulk_add_cb(request_id, (data_control_h)provider, bulk_results, provider_result, error, user_data);
+}
+
 static void __free_data(gpointer data)
 {
 	if (data) {
@@ -94,6 +104,7 @@ static void __initialize(void)
 	datacontrol_map_cb.set = __map_set_response;
 	datacontrol_map_cb.add = __map_add_response;
 	datacontrol_map_cb.remove = __map_remove_response;
+	datacontrol_map_cb.bulk_add = __map_bulk_add_response;
 }
 
 EXPORT_API int data_control_map_create(data_control_h *provider)
@@ -204,5 +215,14 @@ EXPORT_API int data_control_map_remove(data_control_h provider, const char *key,
 		return retval;
 
 	return convert_to_tizen_error(datacontrol_map_remove((datacontrol_h)provider, key, value, request_id));
+}
+
+EXPORT_API int data_control_map_bulk_add(data_control_h provider, data_control_bulk_data_h bulk_data_h, int *request_id)
+{
+	int retval = datacontrol_check_privilege(PRIVILEGE_CONSUMER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
+
+	return convert_to_tizen_error(datacontrol_map_bulk_add((datacontrol_h)provider, bulk_data_h, request_id));
 }
 
