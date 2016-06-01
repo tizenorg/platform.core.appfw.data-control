@@ -39,6 +39,7 @@
 
 #include "data-control-sql.h"
 #include "data-control-internal.h"
+#include "data-control-bulk.h"
 
 #define REQUEST_PATH_MAX		512
 #define MAX_REQUEST_ARGUMENT_SIZE	1048576	/* 1MB */
@@ -608,16 +609,22 @@ error:
 	return FALSE;
 }
 
-int __datacontrol_send_sql_async(int sockfd, bundle *kb, bundle *extra_kb, datacontrol_request_type type, void *data)
+int __datacontrol_send_sql_async(int sockfd, bundle *kb, void *extra_data, datacontrol_request_type type, void *data)
 {
 	bundle_raw *kb_data = NULL;
 	bundle_raw *extra_kb_data = NULL;
 	int ret = DATACONTROL_ERROR_NONE;
 	int datalen = 0;
-	int extra_datalen = 0;
+	int extra_kb_datalen = 0;
 	char *buf = NULL;
 	int total_len = 0;
 	unsigned int nb = 0;
+	int i;
+	int size;
+	bundle *bulk_data;
+	data_control_bulk_data_h bulk_data_h = NULL;
+	bundle_raw *encode_data = NULL;
+	int encode_datalen;
 
 	LOGE("send async ~~~");
 
@@ -629,14 +636,14 @@ int __datacontrol_send_sql_async(int sockfd, bundle *kb, bundle *extra_kb, datac
 
 	if (DATACONTROL_TYPE_SQL_INSERT == type ||
 			DATACONTROL_TYPE_SQL_UPDATE == type) {
-		bundle_encode_raw(extra_kb, &extra_kb_data, &extra_datalen);
+		bundle_encode_raw((bundle *)extra_data, &extra_kb_data, &extra_kb_datalen);
 		if (extra_kb_data == NULL) {
 			LOGE("bundle encode error");
 			goto out;
 		}
 	}
 
-	total_len =  sizeof(datalen) + datalen + sizeof(extra_datalen) + extra_datalen;
+	total_len =  sizeof(datalen) + datalen + sizeof(extra_kb_datalen) + extra_kb_datalen;
 
 	/* encoded bundle + encoded bundle size */
 	buf = (char *)calloc(total_len, sizeof(char));
@@ -649,11 +656,10 @@ int __datacontrol_send_sql_async(int sockfd, bundle *kb, bundle *extra_kb, datac
 	memcpy(buf, &datalen, sizeof(datalen));
 	memcpy(buf + sizeof(datalen), kb_data, datalen);
 
-	if (extra_datalen > 0) {
-		memcpy(buf + sizeof(datalen) + datalen, &extra_datalen, sizeof(extra_datalen));
-		memcpy(buf + sizeof(datalen) + datalen + sizeof(extra_datalen), extra_kb_data, extra_datalen);
+	if (extra_kb_datalen > 0) {
+		memcpy(buf + sizeof(datalen) + datalen, &extra_kb_datalen, sizeof(extra_kb_datalen));
+		memcpy(buf + sizeof(datalen) + datalen + sizeof(extra_kb_datalen), extra_kb_data, extra_kb_datalen);
 	}
-
 
 	LOGI("write : %d", total_len);
 	if (_write_socket(sockfd, buf, total_len, &nb) != DATACONTROL_ERROR_NONE) {
@@ -662,16 +668,43 @@ int __datacontrol_send_sql_async(int sockfd, bundle *kb, bundle *extra_kb, datac
 		goto out;
 	}
 
+	if (DATACONTROL_TYPE_SQL_BULK_INSERT == type) {
+		bulk_data_h = (data_control_bulk_data_h)extra_data;
+		size = datacontrol_bulk_data_get_size(bulk_data_h);
+
+		if (_write_socket(sockfd, &size, sizeof(size), &nb) != DATACONTROL_ERROR_NONE) {
+			LOGI("write bulk size fail");
+			ret = DATACONTROL_ERROR_IO_ERROR;
+			goto out;
+		}
+		for (i = 0; i < size; i++) {
+			bulk_data = datacontrol_bulk_data_get_data(bulk_data_h, i);
+			bundle_encode_raw(bulk_data, &encode_data, &encode_datalen);
+			if (_write_socket(sockfd, &encode_datalen, sizeof(encode_datalen), &nb) != DATACONTROL_ERROR_NONE) {
+				LOGI("write bulk encode_datalen fail");
+				ret = DATACONTROL_ERROR_IO_ERROR;
+				goto out;
+			}
+
+			if (_write_socket(sockfd, encode_data, encode_datalen, &nb) != DATACONTROL_ERROR_NONE) {
+				LOGI("write bulk encode_data fail");
+				ret = DATACONTROL_ERROR_IO_ERROR;
+				goto out;
+			}
+		}
+	}
+
 out:
 	if (buf)
 		free(buf);
 	bundle_free_encoded_rawdata(&kb_data);
 	bundle_free_encoded_rawdata(&extra_kb_data);
+	bundle_free_encoded_rawdata(&encode_data);
 
 	return ret;
 }
 
-static int __sql_request_provider(datacontrol_h provider, datacontrol_request_type type, bundle *request_data, bundle *extra_kb, int request_id)
+static int __sql_request_provider(datacontrol_h provider, datacontrol_request_type type, bundle *request_data, void *extra_data, int request_id)
 {
 	char *app_id = NULL;
 	void *response_cb_data = NULL;
@@ -791,7 +824,7 @@ static int __sql_request_provider(datacontrol_h provider, datacontrol_request_ty
 		}
 
 		LOGE("send data from consumer");
-		ret = __datacontrol_send_sql_async(socket_info->socket_fd, request_data, extra_kb, type, NULL);
+		ret = __datacontrol_send_sql_async(socket_info->socket_fd, request_data, extra_data, type, NULL);
 		if (ret != DATACONTROL_ERROR_NONE)
 			g_hash_table_remove(__socket_pair_hash, provider->provider_id);
 		else
@@ -1275,3 +1308,52 @@ int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, co
 	return ret;
 }
 
+int datacontrol_sql_bulk_insert(datacontrol_h provider, data_control_bulk_data_h bulk_data_h, int *request_id)
+{
+	int ret = 0;
+	long long arg_size = 0;
+	const char *arg_list[2];
+	bundle *b;
+	bundle *data;
+	int size;
+	int i;
+
+	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL) {
+		LOGE("Invalid parameter");
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
+	LOGI("SQL data control, insert to provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
+
+	/* Check size of arguments */
+	size = datacontrol_bulk_data_get_size(bulk_data_h);
+	for (i = 0; i < size; i++) {
+		data = datacontrol_bulk_data_get_data(bulk_data_h, i);
+		bundle_foreach(data, bundle_foreach_check_arg_size_cb, &arg_size);
+	}
+	arg_size += strlen(provider->data_id) * sizeof(wchar_t);
+	if (arg_size > MAX_REQUEST_ARGUMENT_SIZE) {
+		LOGE("The size of the request argument exceeds the limit, 1M.");
+		return DATACONTROL_ERROR_MAX_EXCEEDED;
+	}
+
+	b = bundle_create();
+	if (!b)	{
+		LOGE("unable to create bundle: %d", errno);
+		return DATACONTROL_ERROR_OUT_OF_MEMORY;
+	}
+
+	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
+	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
+
+	arg_list[0] = provider->data_id;
+	bundle_add_str_array(b, OSP_K_ARG, arg_list, 1);
+
+	/* Set the request id */
+	*request_id = _datacontrol_create_request_id();
+	LOGI("request id : %d", *request_id);
+
+	ret = __sql_request_provider(provider, DATACONTROL_TYPE_SQL_BULK_INSERT, b, bulk_data_h, *request_id);
+	bundle_free(b);
+	return ret;
+}

@@ -38,6 +38,7 @@
 #include "data-control-sql.h"
 #include "data-control-provider.h"
 #include "data-control-internal.h"
+#include "data-control-bulk.h"
 
 #define QUERY_MAXLEN			4096
 #define ROW_ID_SIZE			32
@@ -525,7 +526,7 @@ out:
 	return ret;
 }
 
-static bundle *__get_data_sql(int fd)
+static bundle *__get_bundle_data_from_fd(int fd)
 {
 	bundle *b = bundle_create();
 	int len = 0;
@@ -562,10 +563,38 @@ static bundle *__get_data_sql(int fd)
 		if (buf)
 			free(buf);
 	} else {
-		LOGE("__get_data_sql read count : %d", len);
+		LOGE("__get_bundle_data_from_fd read count : %d", len);
 	}
 
 	return b;
+}
+
+static data_control_bulk_data_h __get_bulk_data_from_fd(int fd)
+{
+	data_control_bulk_data_h ret_bulk_data_h = NULL;
+	int size = 0;
+	int ret;
+	int i;
+	bundle *data;
+
+	datacontrol_bulk_data_create(&ret_bulk_data_h);
+	ret = read(fd, &size, sizeof(int));
+	if (ret < sizeof(int)) {
+		LOGE("read error :%d", ret);
+		datacontrol_bulk_data_destroy(&ret_bulk_data_h);
+		return NULL;
+	}
+
+	for (i = 0; i < size; i++) {
+		data = __get_bundle_data_from_fd(fd);
+		if (data == NULL) {
+			LOGE("get bundle data from fd fail");
+			datacontrol_bulk_data_destroy(&ret_bulk_data_h);
+			return NULL;
+		}
+		datacontrol_bulk_data_add(ret_bulk_data_h, data);
+	}
+	return ret_bulk_data_h;
 }
 
 static bundle *__set_result(bundle *b, datacontrol_request_type type, void *data)
@@ -1026,7 +1055,7 @@ int __provider_process(bundle *b, int fd)
 
 	/* Get the request type */
 	datacontrol_request_type type = atoi(request_type);
-	if (type >= DATACONTROL_TYPE_SQL_SELECT && type <= DATACONTROL_TYPE_SQL_DELETE)	{
+	if (type >= DATACONTROL_TYPE_SQL_SELECT && type <= DATACONTROL_TYPE_SQL_BULK_INSERT)	{
 		if (provider_sql_cb == NULL) {
 			LOGE("SQL callback is not registered.");
 			return DATACONTROL_ERROR_INVALID_PARAMETER;
@@ -1120,9 +1149,9 @@ int __provider_process(bundle *b, int fd)
 	case DATACONTROL_TYPE_SQL_UPDATE:
 	{
 		LOGI("INSERT / UPDATE handler");
-		bundle *sql = __get_data_sql(fd);
+		bundle *sql = __get_bundle_data_from_fd(fd);
 		if (sql == NULL) {
-			LOGE("__get_data_sql fail");
+			LOGE("__get_bundle_data_from_fd fail");
 			goto err;
 		}
 		if (type == DATACONTROL_TYPE_SQL_INSERT) {
@@ -1135,6 +1164,19 @@ int __provider_process(bundle *b, int fd)
 			provider_sql_cb->update(provider_req_id, provider, sql, where, provider_sql_user_data);
 		}
 		bundle_free(sql);
+		break;
+	}
+	case DATACONTROL_TYPE_SQL_BULK_INSERT:
+	{
+		LOGI("BULK INSERT handler");
+		data_control_bulk_data_h data = __get_bulk_data_from_fd(fd);
+		if (data == NULL) {
+			LOGE("__get_bundle_data_from_fd fail");
+			goto err;
+		}
+
+		provider_sql_cb->bulk_insert(provider_req_id, provider, data, provider_sql_user_data);
+		datacontrol_bulk_data_destroy(&data);
 		break;
 	}
 	case DATACONTROL_TYPE_SQL_DELETE:

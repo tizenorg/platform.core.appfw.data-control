@@ -23,6 +23,7 @@
 #define _APPFW_DATA_CONTROL_TYPES_H_
 
 #include <errno.h>
+#include <bundle.h>
 
 #ifdef __GNUC__
 #   ifndef EXPORT_API
@@ -31,6 +32,11 @@
 #else
 #   define EXPORT_API
 #endif
+
+typedef struct {
+	bundle *result_data;
+	int result;
+} data_control_bulk_result_data_s;
 
 /**
  * @brief Provider handle
@@ -72,10 +78,12 @@ typedef enum
 	DATACONTROL_TYPE_SQL_INSERT,
 	DATACONTROL_TYPE_SQL_UPDATE,
 	DATACONTROL_TYPE_SQL_DELETE,
+	DATACONTROL_TYPE_SQL_BULK_INSERT,
 	DATACONTROL_TYPE_MAP_GET,
 	DATACONTROL_TYPE_MAP_SET,
 	DATACONTROL_TYPE_MAP_ADD,
 	DATACONTROL_TYPE_MAP_REMOVE,
+	DATACONTROL_TYPE_MAP_BULK_ADD,
 	DATACONTROL_TYPE_ADD_DATA_CHANGED_CB,
 	DATACONTROL_TYPE_REMOVE_DATA_CHANGED_CB,
 	DATACONTROL_TYPE_MAX = 255

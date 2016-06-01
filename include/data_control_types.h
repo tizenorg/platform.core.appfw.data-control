@@ -18,6 +18,9 @@
 #define __TIZEN_APPFW__DATA_CONTROL_TYPES_H__
 
 #include <tizen.h>
+#include <glib.h>
+
+ #include <bundle.h>
 
 /**
  * @file    data_control_types.h
@@ -28,6 +31,9 @@
  * @addtogroup CAPI_DATA_CONTROL_MODULE
  * @{
  */
+
+typedef GList *data_control_bulk_data_h;
+typedef GList *data_control_bulk_result_data_h;
 
 /**
  * @brief The structure type for the provider handle.

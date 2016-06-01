@@ -20,6 +20,7 @@ SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -Wall -fPIC -Werror -fvisibi
 SET(CMAKE_C_FLAGS_DEBUG "-O0 -g")
 
 ADD_LIBRARY (${PROJECT_NAME} SHARED
+	src/data-control-bulk.c
 	src/data-control-noti.c
 	src/data-control-map.c
 	src/data-control-sql.c
@@ -27,6 +28,7 @@ ADD_LIBRARY (${PROJECT_NAME} SHARED
 	src/data-control-provider.c
 	src/data-control-internal.c
 	src/data_control_internal.c
+	src/data_control_bulk.c
 	src/data_control_noti.c
 	src/data_control_map.c
 	src/data_control_sql.c
