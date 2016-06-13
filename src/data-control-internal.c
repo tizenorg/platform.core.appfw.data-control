@@ -255,34 +255,6 @@ int _read_socket(int fd, char *buffer, unsigned int nbytes,
 	return DATACONTROL_ERROR_NONE;
 }
 
-char *_datacontrol_create_select_statement(char *data_id,
-		const char **column_list, int column_count,
-		const char *where, const char *order, int page_number,
-		int count_per_page)
-{
-	char *column = calloc(MAX_COLUMN_SIZE, sizeof(char));
-	int i = 0;
-	char *statement;
-
-	while (i < column_count - 1) {
-		LOGI("column i = %d, %s", i, column_list[i]);
-		strncat(column, column_list[i], MAX_COLUMN_SIZE - (strlen(column) + 1));
-		strncat(column, ", ", MAX_COLUMN_SIZE - (strlen(column) + 1));
-		i++;
-	}
-
-	strncat(column, column_list[i], MAX_COLUMN_SIZE - (strlen(column) + 1));
-
-	statement = calloc(MAX_STATEMENT_SIZE, sizeof(char));
-	snprintf(statement, MAX_STATEMENT_SIZE, "SELECT %s * FROM %s WHERE %s ORDER BY %s", column,
-			data_id, where, order);
-
-	LOGI("SQL statement: %s", statement);
-
-	free(column);
-	return statement;
-}
-
 int _datacontrol_create_request_id(void)
 {
 	static int id = 0;

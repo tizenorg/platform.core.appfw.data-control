@@ -91,10 +91,6 @@ struct datacontrol_s {
 
 int _consumer_request_compare_cb(gconstpointer a, gconstpointer b);
 int _datacontrol_sql_set_cursor(const char *path);
-char *_datacontrol_create_select_statement(char *data_id,
-		const char **column_list, int column_count,
-		const char *where, const char *order, int page_number,
-		int count_per_page);
 int _datacontrol_create_request_id(void);
 int _datacontrol_get_data_changed_callback_id(void);
 int _datacontrol_get_data_changed_filter_callback_id(void);
