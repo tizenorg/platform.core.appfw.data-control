@@ -1230,8 +1230,6 @@ int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, co
 	int ret = 0;
 	long long arg_size = 0;
 	bundle *b;
-	char update_column_count[MAX_LEN_DATACONTROL_COLUMN_COUNT] = {0, };
-	int count;
 	const char *arg_list[4];
 
 	if (provider == NULL || provider->provider_id == NULL || provider->data_id == NULL || update_data == NULL || where == NULL) {
@@ -1256,17 +1254,9 @@ int datacontrol_sql_update(datacontrol_h provider, const bundle *update_data, co
 	bundle_add_str(b, OSP_K_DATACONTROL_PROVIDER, provider->provider_id);
 	bundle_add_str(b, OSP_K_DATACONTROL_DATA, provider->data_id);
 
-	ret = snprintf(update_column_count, MAX_LEN_DATACONTROL_COLUMN_COUNT, "%d", count);
-	if (ret < 0) {
-		LOGE("unable to convert update col count to string: %d", errno);
-		bundle_free(b);
-		return DATACONTROL_ERROR_OUT_OF_MEMORY;
-	}
-
 	arg_list[0] = provider->data_id; /* list(0): data ID */
-	arg_list[1] = update_column_count;
-	arg_list[2] = where;
-	bundle_add_str_array(b, OSP_K_ARG, arg_list, 3);
+	arg_list[1] = where;
+	bundle_add_str_array(b, OSP_K_ARG, arg_list, 2);
 
 	*request_id = _datacontrol_create_request_id();
 	ret = __sql_request_provider(provider, DATACONTROL_TYPE_SQL_UPDATE, b, (bundle *)update_data, *request_id);
