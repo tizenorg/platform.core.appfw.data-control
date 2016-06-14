@@ -90,7 +90,7 @@ datacontrol_data_change_type_e _get_internal_noti_type(data_control_data_change_
 data_control_data_change_type_e _get_public_noti_type(datacontrol_data_change_type_e type)
 {
 	data_control_data_change_type_e ret_type = DATA_CONTROL_DATA_CHANGE_SQL_UPDATE;
-	switch(type) {
+	switch (type) {
 	case DATACONTROL_DATA_CHANGE_SQL_UPDATE:
 		ret_type = DATA_CONTROL_DATA_CHANGE_SQL_UPDATE;
 		break;

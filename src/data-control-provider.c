@@ -793,7 +793,7 @@ static int __insert_consumer_list_db_info(char *app_id, char *provider_id, char 
 		goto out;
 	}
 
-out :
+out:
 	if (stmt)
 		sqlite3_finalize(stmt);
 
@@ -831,7 +831,7 @@ static int __delete_consumer_list_db_info(char *object_path)
 		goto out;
 	}
 
-out :
+out:
 	if (stmt)
 		sqlite3_finalize(stmt);
 
