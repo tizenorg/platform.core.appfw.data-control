@@ -41,7 +41,6 @@
 #include "data-control-internal.h"
 
 #define REQUEST_PATH_MAX		512
-#define MAX_REQUEST_ARGUMENT_SIZE	1048576	/* 1MB */
 
 typedef struct {
 	char *provider_id;
@@ -362,6 +361,12 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 			goto out;
 		}
 
+		if (column_name_len < 0 || column_name_len > MAX_COLUMN_SIZE) {
+			retval = DATACONTROL_ERROR_IO_ERROR;
+			LOGE("Invalid column_name_len %d", column_name_len);
+			goto out;
+		}
+
 		LOGE("column_name_len : %d", column_name_len);
 		if (write(result_fd, &column_name_len, sizeof(int)) == -1) {
 			LOGE("Writing a column_type to a file descriptor is failed. errno = %d", errno);
@@ -414,6 +419,12 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 		goto out;
 	}
 
+	if (row_count < 0 || row_count > MAX_ROW_COUNT) {
+		LOGE("invalid row_count %d", row_count);
+		retval = DATACONTROL_ERROR_IO_ERROR;
+		goto out;
+	}
+
 	LOGE("row_count : %lld", row_count);
 	if (write(result_fd, &row_count, sizeof(row_count)) == -1) {
 		LOGE("Writing a row_count to a file descriptor is failed. errno = %d", errno);
@@ -462,7 +473,7 @@ static int __recv_sql_select_process(bundle *kb, int fd, resultset_cursor *curso
 				goto out;
 			}
 
-			if (size > 0) {
+			if (size > 0 && size < MAX_REQUEST_ARGUMENT_SIZE) {
 				value = (void *)malloc(sizeof(void) * size);
 				if (value == NULL) {
 					LOGE("Out of mememory");
@@ -539,7 +550,7 @@ static gboolean __consumer_recv_sql_message(GIOChannel *channel,
 			LOGE("__consumer_recv_sql_message: ...from %d: EOF\n", fd);
 			goto error;
 		}
-		if (data_len > 0) {
+		if (data_len > 0 && data_len < MAX_REQUEST_ARGUMENT_SIZE) {
 			buf = (char *)calloc(data_len + 1, sizeof(char));
 			if (buf == NULL) {
 				LOGE("Out of memory.");

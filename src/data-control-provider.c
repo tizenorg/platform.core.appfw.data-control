@@ -539,7 +539,7 @@ static bundle *__get_data_sql(int fd)
 		return NULL;
 	}
 
-	if (len > 0) {
+	if (len > 0 && len < MAX_REQUEST_ARGUMENT_SIZE) {
 		buf = (char *)calloc(len, sizeof(char));
 		if (buf == NULL) {
 			LOGE("calloc fail");
@@ -1081,7 +1081,7 @@ int __provider_process(bundle *b, int fd)
 	{
 		int i = 1;
 		int current = 0;
-		int column_count = atoi(arg_list[i++]); /* Column count */
+		int column_count = _get_int_from_str(arg_list[i++]); /* Column count */
 
 		LOGI("SELECT column count: %d", column_count);
 		column_list = (const char **)malloc(column_count * (sizeof(char *)));
@@ -1234,7 +1234,7 @@ gboolean __provider_recv_message(GIOChannel *channel,
 		}
 
 		LOGI("__provider_recv_message: ...from %d: %d bytes\n", fd, data_len);
-		if (data_len > 0) {
+		if (data_len > 0 && data_len < MAX_REQUEST_ARGUMENT_SIZE) {
 			bundle *kb = NULL;
 
 			buf = (char *)calloc(data_len + 1, sizeof(char));
@@ -1406,6 +1406,12 @@ static int __provider_noti_process(bundle *b, datacontrol_request_type type)
 	}
 	provider->provider_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_PROVIDER);
 	provider->data_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_DATA);
+	if (provider->provider_id == NULL || provider->data_id == NULL) {
+		LOGE("invlid provider value %s, %s", provider->provider_id, provider->data_id);
+		free(provider);
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
 	LOGI("Noti Provider ID: %s, data ID: %s, request type: %d", provider->provider_id, provider->data_id, type);
 	path = _get_encoded_path(provider, caller_app_id);
 	if (path == NULL) {

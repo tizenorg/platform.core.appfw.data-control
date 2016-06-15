@@ -41,7 +41,6 @@
 #include "data-control-internal.h"
 #include "data-control-types.h"
 
-#define MAX_COLUMN_SIZE				512
 #define MAX_STATEMENT_SIZE			1024
 #define RESULT_VALUE_COUNT			"RESULT_VALUE_COUNT"
 #define MAX_COUNT_PER_PAGE		"MAX_COUNT_PER_PAGE"
@@ -57,6 +56,13 @@
 #define DATA_CONTROL_DB_NAME "DATA_CONTROL_DATA_CHANGE_TABLE"
 
 static GDBusConnection *_gdbus_conn = NULL;
+
+bool _check_int(int num)
+{
+	if (num > -1 && num < INT_MAX)
+		return true;
+	return false;
+}
 
 datacontrol_data_change_type_e _get_internal_noti_type(data_control_data_change_type_e type)
 {
