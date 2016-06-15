@@ -24,7 +24,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+
 #include "data-control-sql-cursor.h"
+#include "data-control-internal.h"
 
 #undef LOG_TAG
 #ifndef LOG_TAG
@@ -32,7 +34,6 @@
 #endif
 
 #define ERR_BUFFER_SIZE		1024
-#define MAX_ROW_COUNT	        1024
 
 resultset_cursor *datacontrol_sql_get_cursor()
 {
@@ -147,6 +148,11 @@ int datacontrol_sql_get_column_name(resultset_cursor *cursor, int column_index, 
 		ret = read(fd, &column_len, sizeof(int));
 		if (ret == 0) {
 			LOGE("unable to read column_len: %d", column_len);
+			return DATACONTROL_ERROR_IO_ERROR;
+		}
+
+		if (column_len < 0 || column_len > MAX_COLUMN_SIZE) {
+			LOGE("Invalid column_len: %d", column_len);
 			return DATACONTROL_ERROR_IO_ERROR;
 		}
 
@@ -352,7 +358,7 @@ int datacontrol_sql_get_blob_data(resultset_cursor *cursor, int column_index, vo
 		return DATACONTROL_ERROR_MAX_EXCEEDED; /* overflow */
 	}
 
-	if (size > 0) {
+	if (size > 0 && size < MAX_REQUEST_ARGUMENT_SIZE) {
 		data = (char *)malloc((size + 1) * (sizeof(char)));
 		memset(data, 0, size + 1);
 
@@ -365,6 +371,9 @@ int datacontrol_sql_get_blob_data(resultset_cursor *cursor, int column_index, vo
 
 		memcpy(buffer, data, size + 1);
 		free(data);
+	} else {
+		LOGE("Invalid size %d", size);
+		return DATACONTROL_ERROR_IO_ERROR;
 	}
 	return DATACONTROL_ERROR_NONE;
 }
@@ -561,7 +570,7 @@ int datacontrol_sql_get_text_data(resultset_cursor *cursor, int column_index, ch
 		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
-	if (size > 0) {
+	if (size > 0 && size < MAX_REQUEST_ARGUMENT_SIZE) {
 		data = (char *)malloc((size + 1) * (sizeof(char)));
 		if (!data) {
 			LOGE("unable to create buffer to read");
@@ -578,6 +587,9 @@ int datacontrol_sql_get_text_data(resultset_cursor *cursor, int column_index, ch
 
 		memcpy(buffer, data, size + 1);
 		free(data);
+	} else {
+		LOGE("Invalid size %d", size);
+		return DATACONTROL_ERROR_IO_ERROR;
 	}
 
 	return DATACONTROL_ERROR_NONE;

@@ -145,6 +145,10 @@ static char **__map_get_value_list(int fd, int *value_count)
 		return NULL;
 	}
 
+	if (count < 0 || count > MAX_VALUE_COUNT) {
+		LOGE("invalid count %d", count);
+		return NULL;
+	}
 
 	value_list = (char **)calloc(count, sizeof(char *));
 	if (value_list == NULL) {
@@ -154,8 +158,12 @@ static char **__map_get_value_list(int fd, int *value_count)
 
 	for (i = 0; i < count; i++) {
 		if (_read_socket(fd, (char *)&nbytes, sizeof(nbytes), &nb)) {
-				LOGE("datacontrol_recv_map_get_value_list : ...from %d: fail to read\n", fd);
-				goto ERROR;
+			LOGE("datacontrol_recv_map_get_value_list : ...from %d: fail to read\n", fd);
+			goto ERROR;
+		}
+		if (nbytes < 0 || nbytes > MAX_REQUEST_ARGUMENT_SIZE) {
+			LOGE("invalid nbytes %d", nbytes);
+			goto ERROR;
 		}
 
 		LOGI("nbytes : %d  %d" , nbytes , nb);
@@ -364,7 +372,7 @@ static gboolean __recv_map_message(GIOChannel *channel,
 		}
 
 		LOGI("__recv_map_message: ...from %d: %d bytes\n", fd, nbytes);
-		if (nbytes > 0) {
+		if (nbytes > 0 && nbytes < MAX_REQUEST_ARGUMENT_SIZE) {
 			buf = (char *) calloc(nbytes + 1, sizeof(char));
 			if (buf == NULL) {
 				LOGE("Malloc failed!!");
