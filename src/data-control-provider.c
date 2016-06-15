@@ -192,7 +192,7 @@ static int __send_select_result(int fd, bundle *b, void *data)
 	sqlite3_int64 offset_idx = 0;
 	sqlite3_int64 row_count = 0;
 	unsigned int nb = 0;
-	int type;
+	int type = 0;
 	int column_name_len;
 	const char *page_number_str;
 	int size = 0;
@@ -358,7 +358,10 @@ static int __send_select_result(int fd, bundle *b, void *data)
 				case SQLITE_TEXT:
 					type = 3;
 					value = (char *)sqlite3_column_text(state, i);
-					size = strlen(value) + 1;
+					if (value)
+						size = strlen(value) + 1;
+					else
+						size = 0;
 					break;
 				case SQLITE_BLOB:
 					type = 4;
@@ -539,7 +542,7 @@ static bundle *__get_data_sql(int fd)
 		return NULL;
 	}
 
-	if (len > 0) {
+	if (len > 0 && len < MAX_REQUEST_ARGUMENT_SIZE) {
 		buf = (char *)calloc(len, sizeof(char));
 		if (buf == NULL) {
 			LOGE("calloc fail");
@@ -1081,7 +1084,7 @@ int __provider_process(bundle *b, int fd)
 	{
 		int i = 1;
 		int current = 0;
-		int column_count = atoi(arg_list[i++]); /* Column count */
+		int column_count = _get_int_from_str(arg_list[i++]); /* Column count */
 
 		LOGI("SELECT column count: %d", column_count);
 		column_list = (const char **)malloc(column_count * (sizeof(char *)));
@@ -1234,7 +1237,7 @@ gboolean __provider_recv_message(GIOChannel *channel,
 		}
 
 		LOGI("__provider_recv_message: ...from %d: %d bytes\n", fd, data_len);
-		if (data_len > 0) {
+		if (data_len > 0 && data_len < MAX_REQUEST_ARGUMENT_SIZE) {
 			bundle *kb = NULL;
 
 			buf = (char *)calloc(data_len + 1, sizeof(char));
@@ -1406,6 +1409,12 @@ static int __provider_noti_process(bundle *b, datacontrol_request_type type)
 	}
 	provider->provider_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_PROVIDER);
 	provider->data_id = (char *)bundle_get_val(b, OSP_K_DATACONTROL_DATA);
+	if (provider->provider_id == NULL || provider->data_id == NULL) {
+		LOGE("invalid provider value %s, %s", provider->provider_id, provider->data_id);
+		free(provider);
+		return DATACONTROL_ERROR_INVALID_PARAMETER;
+	}
+
 	LOGI("Noti Provider ID: %s, data ID: %s, request type: %d", provider->provider_id, provider->data_id, type);
 	path = _get_encoded_path(provider, caller_app_id);
 	if (path == NULL) {

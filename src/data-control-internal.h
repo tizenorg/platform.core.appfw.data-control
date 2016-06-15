@@ -19,6 +19,7 @@
  * @brief	This is the header file for private keys of the data-control.
  */
 #include <gio/gio.h>
+#include <bundle.h>
 #include "data_control_types.h"
 
 #ifndef _APPFW_DATA_CONTROL_INTERNAL_H_
@@ -56,6 +57,10 @@
 #define DATACONTROL_REQUEST_FILE_PREFIX "/tmp/data-control/datacontrol.request."
 #define DATACONTROL_RESULT_FILE_PREFIX  "/tmp/data-control/datacontrol.result."
 
+#define MAX_REQUEST_ARGUMENT_SIZE	1048576	/* 1MB */
+#define MAX_ROW_COUNT		1024
+#define MAX_COLUMN_SIZE		512
+#define MAX_VALUE_COUNT		1024
 
 /**
  * @brief Enumerations of different type of data control requests.
@@ -116,6 +121,7 @@ int _set_provider_id(datacontrol_h provider, const char *provider_id);
 int _set_data_id(datacontrol_h provider, const char *data_id);
 datacontrol_data_change_type_e _get_internal_noti_type(data_control_data_change_type_e type);
 data_control_data_change_type_e _get_public_noti_type(datacontrol_data_change_type_e type);
+bool _check_int(int num);
 
 #endif /* _APPFW_DATA_CONTROL_INTERNAL_H_ */
 

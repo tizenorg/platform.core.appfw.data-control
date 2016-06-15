@@ -46,7 +46,6 @@ typedef struct {
 } map_response_cb_s;
 
 static void *datacontrol_map_tree_root = NULL;
-static const int MAX_ARGUMENT_SIZE = 16384; /* 16KB */
 static GHashTable *__socket_pair_hash = NULL;
 
 static void __map_call_cb(const char *provider_id, int request_id, datacontrol_request_type type,
@@ -145,6 +144,10 @@ static char **__map_get_value_list(int fd, int *value_count)
 		return NULL;
 	}
 
+	if (count < 0 || count > MAX_VALUE_COUNT) {
+		LOGE("invalid count %d", count);
+		return NULL;
+	}
 
 	value_list = (char **)calloc(count, sizeof(char *));
 	if (value_list == NULL) {
@@ -154,8 +157,12 @@ static char **__map_get_value_list(int fd, int *value_count)
 
 	for (i = 0; i < count; i++) {
 		if (_read_socket(fd, (char *)&nbytes, sizeof(nbytes), &nb)) {
-				LOGE("datacontrol_recv_map_get_value_list : ...from %d: fail to read\n", fd);
-				goto ERROR;
+			LOGE("datacontrol_recv_map_get_value_list : ...from %d: fail to read\n", fd);
+			goto ERROR;
+		}
+		if (nbytes < 0 || nbytes > MAX_REQUEST_ARGUMENT_SIZE) {
+			LOGE("invalid nbytes %d", nbytes);
+			goto ERROR;
 		}
 
 		LOGI("nbytes : %d  %d" , nbytes , nb);
@@ -364,7 +371,7 @@ static gboolean __recv_map_message(GIOChannel *channel,
 		}
 
 		LOGI("__recv_map_message: ...from %d: %d bytes\n", fd, nbytes);
-		if (nbytes > 0) {
+		if (nbytes > 0 && nbytes < MAX_REQUEST_ARGUMENT_SIZE) {
 			buf = (char *) calloc(nbytes + 1, sizeof(char));
 			if (buf == NULL) {
 				LOGE("Malloc failed!!");
@@ -793,7 +800,7 @@ int datacontrol_map_get_with_page(datacontrol_h provider, const char *key, int *
 	LOGI("Gets the value list from provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
 	arg_size = (strlen(provider->data_id) + strlen(key)) * sizeof(wchar_t);
-	if (arg_size > MAX_ARGUMENT_SIZE) {
+	if (arg_size > MAX_REQUEST_ARGUMENT_SIZE) {
 		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
@@ -855,7 +862,7 @@ int datacontrol_map_set(datacontrol_h provider, const char *key, const char *old
 	LOGI("Sets the old value to new value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
 	arg_size = (strlen(provider->data_id) + strlen(key) + strlen(old_value) + strlen(new_value)) * sizeof(wchar_t);
-	if (arg_size > MAX_ARGUMENT_SIZE) {
+	if (arg_size > MAX_REQUEST_ARGUMENT_SIZE) {
 		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
@@ -902,7 +909,7 @@ int datacontrol_map_add(datacontrol_h provider, const char *key, const char *val
 	LOGI("Adds the value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
 	arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
-	if (arg_size > MAX_ARGUMENT_SIZE) {
+	if (arg_size > MAX_REQUEST_ARGUMENT_SIZE) {
 		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
@@ -948,7 +955,7 @@ int datacontrol_map_remove(datacontrol_h provider, const char *key, const char *
 	LOGI("Removes the value in provider_id: %s, data_id: %s", provider->provider_id, provider->data_id);
 
 	arg_size = (strlen(provider->data_id) + strlen(key) + strlen(value)) * sizeof(wchar_t);
-	if (arg_size > MAX_ARGUMENT_SIZE) {
+	if (arg_size > MAX_REQUEST_ARGUMENT_SIZE) {
 		LOGE("The size of sending argument (%u) exceeds the maximum limit.", arg_size);
 		return DATACONTROL_ERROR_MAX_EXCEEDED;
 	}
