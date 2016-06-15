@@ -41,7 +41,7 @@
 int datacontrol_check_privilege(privilege_type check_type)
 {
 
-	cynara *p_cynara;
+	cynara *p_cynara = NULL;
 
 	int fd = 0;
 	int ret = 0;

@@ -41,7 +41,6 @@
 #include "data-control-internal.h"
 #include "data-control-types.h"
 
-#define MAX_COLUMN_SIZE				512
 #define MAX_STATEMENT_SIZE			1024
 #define RESULT_VALUE_COUNT			"RESULT_VALUE_COUNT"
 #define MAX_COUNT_PER_PAGE		"MAX_COUNT_PER_PAGE"
