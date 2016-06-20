@@ -231,6 +231,37 @@ int data_control_sql_get_provider_id(data_control_h provider, char **provider_id
  * @brief  Sets the data ID.
  * @since_tizen 2.3
  *
+ * @code
+ *
+ *	{
+ * 		bundle *b;
+ * 		int ret;
+ *
+ * 		// Insert data to Note table
+ * 		ret = data_control_sql_set_data_id(ad->provider_h, "Note");
+ * 		if (ret != DATA_CONTROL_ERROR_NONE)
+ * 			dlog_print(DLOG_ERROR, LOG_TAG, "setting data id failed with error: %d", ret);
+ *
+ * 		b = bundle_create();
+ * 		bundle_add_str(b, ""TITLE"", "test");
+ * 		bundle_add_str(b, "CONTENTS", "test contents");
+ * 		data_control_sql_insert(ad->provider_h, b, &req_id);
+ * 		bundle_free(b);
+ *
+ * 		// Insert data to Dictionary table
+ * 		ret = data_control_sql_set_data_id(ad->provider_h, "Dictionary");
+ * 		if (ret != DATA_CONTROL_ERROR_NONE)
+ * 			dlog_print(DLOG_ERROR, LOG_TAG, "setting data id failed with error: %d", ret);
+ *
+ * 		b = bundle_create();
+ * 		bundle_add_str(b, "WORD", "test");
+ * 		bundle_add_str(b, "WORD_DESC", "test desc");
+ * 		data_control_sql_insert(ad->provider_h, b, &req_id);
+ * 		bundle_free(b);
+ *	}
+ *
+ * @endcode
+ *
  * @param[in]  provider  The provider handle
  * @param[in]  data_id   A string for identifying a specific table to operate \n
  *                       The string consists of one or more components separated by a slash('/').
