@@ -592,6 +592,9 @@ EXPORT_API int data_control_provider_send_data_change_noti(
 		data_control_data_change_type_e type,
 		bundle *data)
 {
+	int retval = datacontrol_check_privilege(PRIVILEGE_PROVIDER);
+	if (retval != DATA_CONTROL_ERROR_NONE)
+		return retval;
 	if (!provider)
 		return DATA_CONTROL_ERROR_INVALID_PARAMETER;
 	if (provider->provider_id == NULL || provider->data_id == NULL)
