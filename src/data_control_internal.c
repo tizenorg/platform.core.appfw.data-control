@@ -106,26 +106,6 @@ out:
 	return ret;
 }
 
-static const char *data_control_error_to_string(data_control_error_e error)
-{
-	switch (error) {
-	case DATA_CONTROL_ERROR_NONE:
-		return "NONE";
-	case DATA_CONTROL_ERROR_INVALID_PARAMETER:
-		return "INVALID_PARAMETER";
-	case DATA_CONTROL_ERROR_OUT_OF_MEMORY:
-		return "OUT_OF_MEMORY";
-	case DATA_CONTROL_ERROR_IO_ERROR:
-		return "IO_ERROR";
-	case DATA_CONTROL_ERROR_PERMISSION_DENIED:
-		return "PERMISSION_DENIED";
-	case DATA_CONTROL_ERROR_MAX_EXCEEDED:
-		return "Too long argument";
-	default:
-		return "UNKNOWN";
-	}
-}
-
 int convert_to_tizen_error(datacontrol_error_e error)
 {
 	switch (error) {
@@ -145,19 +125,3 @@ int convert_to_tizen_error(datacontrol_error_e error)
 		return error;
 	}
 }
-
-int data_control_error(data_control_error_e error,
-		const char *function, const char *description)
-{
-	if (description) {
-		_LOGE("[%s] %s(0x%08x) : %s", function,
-				data_control_error_to_string(error), error,
-				description);
-	} else {
-		_LOGE("[%s] %s(0x%08x)", function,
-				data_control_error_to_string(error), error);
-	}
-
-	return error;
-}
-

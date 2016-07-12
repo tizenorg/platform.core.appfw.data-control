@@ -194,6 +194,7 @@ static void __call_result_callback(int callback_id, int callback_result)
 	}
 }
 
+/* LCOV_EXCL_START */
 static gboolean __add_callback_result_timeout_handler(gpointer user_data)
 {
 	LOGE("add data changed callback time out !!!");
@@ -202,6 +203,7 @@ static gboolean __add_callback_result_timeout_handler(gpointer user_data)
 	__call_result_callback(result_cb_info->callback_id, DATA_CONTROL_ERROR_IO_ERROR);
 	return FALSE;
 }
+/* LCOV_EXCL_STOP */
 
 static void __noti_add_remove_data_changed_cb_result_process(
 		GVariant *parameters)
@@ -403,6 +405,7 @@ int datacontrol_add_data_change_cb(datacontrol_h provider,
 	LOGI("datacontrol_add_data_change_cb done");
 
 	return ret;
+	/* LCOV_EXCL_START */
 err:
 	if (access)
 		free(access);
@@ -414,6 +417,7 @@ err:
 		g_dbus_connection_signal_unsubscribe(_get_dbus_connection(), monitor_id);
 
 	return ret;
+	/* LCOV_EXCL_STOP */
 }
 
 int datacontrol_remove_data_change_cb(datacontrol_h provider, int callback_id)

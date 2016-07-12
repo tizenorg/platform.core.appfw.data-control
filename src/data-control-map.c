@@ -178,6 +178,7 @@ static char **__map_get_value_list(int fd, int *value_count)
 
 	return value_list;
 
+	/* LCOV_EXCL_START */
 ERROR:
 	if (value_list) {
 		for (j = 0; j < i; j++) {
@@ -188,6 +189,7 @@ ERROR:
 	}
 
 	return NULL;
+	/* LCOV_EXCL_STOP */
 }
 
 static void __remove_map_request_info(int request_id, map_response_cb_s *map_dc)
@@ -429,6 +431,7 @@ static gboolean __recv_map_message(GIOChannel *channel,
 	}
 	return TRUE;
 error:
+	/* LCOV_EXCL_START */
 	if (kb)
 		bundle_free(kb);
 	if (buf)
@@ -452,6 +455,7 @@ error:
 		}
 	}
 	return FALSE;
+	/* LCOV_EXCL_STOP */
 }
 
 static int __map_request_provider(datacontrol_h provider, datacontrol_request_type type, bundle *request_data, int request_id)
@@ -723,6 +727,7 @@ int datacontrol_map_register_response_cb(datacontrol_h provider, datacontrol_map
 
 	return DATACONTROL_ERROR_NONE;
 
+	/* LCOV_EXCL_START */
 EXCEPTION:
 	if (access)
 		free(access);
@@ -737,6 +742,7 @@ EXCEPTION:
 	}
 
 	return ret;
+	/* LCOV_EXCL_STOP */
 }
 
 int datacontrol_map_unregister_response_cb(datacontrol_h provider)
@@ -767,7 +773,7 @@ int datacontrol_map_unregister_response_cb(datacontrol_h provider)
 		goto EXCEPTION;
 	}
 
-
+	/* LCOV_EXCL_START */
 EXCEPTION:
 	 if (map_dc_temp) {
 		if (map_dc_temp->provider_id)
@@ -776,6 +782,7 @@ EXCEPTION:
 	 }
 
 	 return ret;
+	/* LCOV_EXCL_STOP */
 }
 
 int datacontrol_map_get(datacontrol_h provider, const char *key, int *request_id)
